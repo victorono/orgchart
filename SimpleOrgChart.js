@@ -40,7 +40,9 @@ class SimpleOrgChart {
         textColor: "#000000",
         subtitleColor: "#6b7280",
         initiallyExpanded: false,
-        initialVisibleLevels: 1
+        initialVisibleLevels: 1,
+        width: '100%',
+        height: '100%',
       };
 
       // Merge default options with provided ones
@@ -526,8 +528,8 @@ class SimpleOrgChart {
       this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       this.svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
       this.svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
-      this.svg.setAttribute('width', '100%');
-      this.svg.setAttribute('height', '100%');
+      this.svg.setAttribute('width', this.options.width || '100%');
+      this.svg.setAttribute('height', this.options.height || '100%');
       this.svg.setAttribute('viewBox', `0 0 ${this.svgWidth} ${this.svgHeight}`);
       this.svg.setAttribute('class', 'organigrama');
 
