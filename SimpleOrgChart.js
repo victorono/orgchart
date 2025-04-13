@@ -43,6 +43,10 @@ class SimpleOrgChart {
         initialVisibleLevels: 1,
         width: '100%',
         height: '100%',
+        sortBy: 'name', // Nueva opción para ordenar el árbol: 'name', 'title', 'id', 'custom'
+        sortDirection: 'asc', // 'asc' o 'desc'
+        sortFunction: null, // Función personalizada para ordenar
+        showSortControls: false, // Mostrar controles de ordenación
       };
 
       // Merge default options with provided ones
@@ -130,18 +134,31 @@ class SimpleOrgChart {
           processedNode.level = 0;
           rootNodes.push(processedNode);
         }
-
-        // We don't set the expansion state here yet
       });
 
       // Remove duplicates from the tree
       this.removeDuplicates(rootNodes);
 
+      // Sort all nodes at every level of the tree consistently
+      const sortAllLevels = (nodes, level) => {
+        // First sort this level
+        this.sortNodes(nodes, level);
+
+        // Then recursively sort all children
+        for (const node of nodes) {
+          if (node.children && node.children.length > 0) {
+            sortAllLevels(node.children, level + 1);
+          }
+        }
+      };
+
+      // Apply sorting to all levels of the tree
+      sortAllLevels(rootNodes, 0);
+
       // Store processed data
       this.hierarchicalData = rootNodes;
 
       // AFTER processing the entire tree, configure initial expansion
-      // IMPORTANT: This ensures we know the correct level of each node
       this.configureInitialExpansion();
     }
 
@@ -417,31 +434,13 @@ class SimpleOrgChart {
       // Get current expansion state
       const currentState = this.expandedNodes.get(nodeId);
 
-      // Save current zoom and viewport state before making changes
-      const currentZoom = this.currentScale;
+      // Save current viewport center before making changes
       const containerRect = this.container.getBoundingClientRect();
+      const viewportCenterX = containerRect.width / 2;
+      const viewportCenterY = containerRect.height / 2;
 
-      // Get current viewBox information
-      const viewBoxWidth = containerRect.width / currentZoom;
-      const viewBoxHeight = containerRect.height / currentZoom;
-      const centerX = (-this.translationX / currentZoom) + (viewBoxWidth / 2);
-      const centerY = (-this.translationY / currentZoom) + (viewBoxHeight / 2);
-
-      // Get current node position before any change
-      const nodePosition = this.nodePositions[nodeId];
-      const nodeX = nodePosition ? nodePosition.x : null;
-      const nodeLevel = nodePosition ? nodePosition.level : null;
-
-      // Calculate node's position relative to the viewBox center
-      let nodeRelativeX = 0;
-      let nodeRelativeY = 0;
-
-      if (nodeX !== null && nodeLevel !== null) {
-        // Position Y del nodo (calculada igual que en renderNode)
-        const nodeY = nodeLevel * (this.options.nodeHeight + this.options.verticalSpacing) + 50;
-        nodeRelativeX = nodeX - centerX;
-        nodeRelativeY = nodeY - centerY;
-      }
+      // Guardar posición exacta del nodo antes de cualquier cambio
+      const oldNodePosition = this.nodePositions[nodeId];
 
       // Change to opposite state
       this.expandedNodes.set(nodeId, !currentState);
@@ -451,6 +450,9 @@ class SimpleOrgChart {
       if (!currentState) {
         const currentNode = this.findNodeById(nodeId);
         if (currentNode && currentNode.children && currentNode.children.length > 0) {
+          // Ordenar los hijos según el criterio actual antes de mostrarlos
+          this.sortNodes(currentNode.children, currentNode.level + 1);
+
           // Make sure immediate children are visible
           currentNode.children.forEach(child => {
             // Only set if it doesn't have a value yet
@@ -471,32 +473,156 @@ class SimpleOrgChart {
       // Re-render the organizational chart
       this.render();
 
-      // Restaurar el zoom original
-      this.currentScale = currentZoom;
-      this.zoomSlider.value = currentZoom;
-      this.zoomLabel.textContent = `${Math.round(currentZoom * 100)}%`;
+      // Calcular el cambio en la posición del nodo clickeado
+      const newPosition = this.nodePositions[nodeId];
 
-      // Ahora ajustamos la posición para mantener el nodo clickeado en la misma posición relativa al centro
-      if (nodeX !== null && nodeLevel !== null) {
-        // Obtener la nueva posición del nodo
-        const newPosition = this.nodePositions[nodeId];
+      if (newPosition && oldNodePosition) {
+        // Calculamos la diferencia en posición para mantener el nodo en el mismo lugar visualmente
+        const deltaX = newPosition.x - oldNodePosition.x;
 
-        if (newPosition) {
-          // Calcular la nueva posición Y del nodo
-          const newNodeY = newPosition.level * (this.options.nodeHeight + this.options.verticalSpacing) + 50;
+        // Ajustamos la traducción para compensar el cambio de posición
+        this.translationX -= deltaX * this.currentScale;
 
-          // Calcular el nuevo centro deseado para mantener la misma posición relativa
-          const newCenterX = newPosition.x - nodeRelativeX;
-          const newCenterY = newNodeY - nodeRelativeY;
+        // Auto-ajustar el zoom cuando sea necesario para mostrar todo el contenido
+        this.autoAdjustZoom();
 
-          // Calcular las nuevas traducciones para lograr ese centro
-          this.translationX = -(newCenterX - (viewBoxWidth / 2)) * currentZoom;
-          this.translationY = -(newCenterY - (viewBoxHeight / 2)) * currentZoom;
-        }
+        // Asegurarnos que los límites del organigrama son visibles
+        this.ensureChartIsVisible();
+      } else {
+        // Si no tenemos posiciones anteriores para comparar, centramos y ajustamos el zoom
+        this.centerChart();
+        this.autoAdjustZoom();
       }
 
       // Actualizar la transformación para reflejar los cambios
       this.updateTransformation();
+    }
+
+    /**
+     * Ajusta automáticamente el nivel de zoom para mostrar todo el contenido
+     * con un margen razonable
+     */
+    autoAdjustZoom() {
+      // Obtener dimensiones del contenedor
+      const containerRect = this.container.getBoundingClientRect();
+      const containerWidth = containerRect.width;
+      const containerHeight = containerRect.height;
+
+      // Obtener dimensiones del organigrama
+      let minX = Infinity, maxX = -Infinity;
+      let minY = Infinity, maxY = -Infinity;
+
+      // Encontrar los límites del organigrama visible
+      Object.values(this.nodePositions).forEach(pos => {
+        const nodeLeft = pos.x - this.options.nodeWidth/2;
+        const nodeRight = pos.x + this.options.nodeWidth/2;
+        const nodeTop = pos.level * (this.options.nodeHeight + this.options.verticalSpacing) + 50 - this.options.nodeHeight/2;
+        const nodeBottom = nodeTop + this.options.nodeHeight;
+
+        minX = Math.min(minX, nodeLeft);
+        maxX = Math.max(maxX, nodeRight);
+        minY = Math.min(minY, nodeTop);
+        maxY = Math.max(maxY, nodeBottom);
+      });
+
+      // Si no hay nodos visibles, salir
+      if (minX === Infinity) return;
+
+      // Añadir margen a las dimensiones
+      const margin = 50;
+      minX -= margin;
+      maxX += margin;
+      minY -= margin;
+      maxY += margin;
+
+      // Calcular dimensiones totales del contenido
+      const contentWidth = maxX - minX;
+      const contentHeight = maxY - minY;
+
+      // Calcular ratios de zoom necesarios para ajustar horizontal y verticalmente
+      const horizontalZoom = containerWidth / contentWidth;
+      const verticalZoom = containerHeight / contentHeight;
+
+      // Usar el zoom más restrictivo (el menor) para asegurar que todo sea visible
+      let newZoom = Math.min(horizontalZoom, verticalZoom);
+
+      // Limitar el zoom a un rango razonable
+      newZoom = Math.max(0.5, Math.min(newZoom, 1.5));
+
+      // Aplicar el nuevo zoom sólo si es significativamente diferente al actual
+      if (Math.abs(newZoom - this.currentScale) > 0.1) {
+        // Ajustar la posición para mantener centrado el contenido
+        const centerX = minX + contentWidth / 2;
+        const centerY = minY + contentHeight / 2;
+
+        // Actualizar el zoom
+        this.currentScale = newZoom;
+        this.zoomSlider.value = newZoom;
+        this.zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
+
+        // Calcular nueva traducción para centrar el contenido
+        this.translationX = (containerWidth / 2) - centerX * newZoom;
+        this.translationY = (containerHeight / 2) - centerY * newZoom;
+      }
+    }
+
+    /**
+     * Asegura que el organigrama permanece visible en el contenedor
+     */
+    ensureChartIsVisible() {
+      const containerRect = this.container.getBoundingClientRect();
+      const containerWidth = containerRect.width;
+      const containerHeight = containerRect.height;
+
+      // Calcular el área visible del organigrama considerando zoom y translación
+      const visibleWidth = containerWidth / this.currentScale;
+      const visibleHeight = containerHeight / this.currentScale;
+
+      // Coordenadas del extremo izquierdo y superior del área visible
+      const visibleLeft = -this.translationX / this.currentScale;
+      const visibleTop = -this.translationY / this.currentScale;
+
+      // Coordenadas extremas del organigrama
+      let minX = Infinity, maxX = -Infinity;
+      let minY = Infinity, maxY = -Infinity;
+
+      // Encontrar los límites del organigrama usando las posiciones de los nodos
+      Object.values(this.nodePositions).forEach(pos => {
+        minX = Math.min(minX, pos.x - this.options.nodeWidth/2);
+        maxX = Math.max(maxX, pos.x + this.options.nodeWidth/2);
+
+        const levelY = pos.level * (this.options.nodeHeight + this.options.verticalSpacing) + 50;
+        minY = Math.min(minY, levelY - this.options.nodeHeight/2);
+        maxY = Math.max(maxY, levelY + this.options.nodeHeight/2 + 60); // +60 para incluir el texto
+      });
+
+      // Si no hay nodos, usar valores predeterminados
+      if (minX === Infinity) {
+        minX = 0;
+        maxX = this.svgWidth;
+        minY = 0;
+        maxY = this.svgHeight;
+      }
+
+      // Verificar si alguna parte del organigrama está fuera del área visible
+
+      // Ajustar horizontalmente si es necesario
+      if (visibleLeft > minX) {
+        // Si el borde izquierdo está fuera de vista, ajustamos
+        this.translationX = -minX * this.currentScale;
+      } else if (visibleLeft + visibleWidth < maxX) {
+        // Si el borde derecho está fuera de vista y hay nodos a la izquierda
+        if (minX < visibleLeft) {
+          // Centramos el organigrama horizontalmente
+          this.translationX = -(minX + (maxX - minX)/2 - visibleWidth/2) * this.currentScale;
+        }
+      }
+
+      // Ajustar verticalmente si es necesario
+      if (visibleTop > minY) {
+        // Si el borde superior está fuera de vista, ajustamos
+        this.translationY = -minY * this.currentScale;
+      }
     }
 
     /**
@@ -1120,6 +1246,12 @@ class SimpleOrgChart {
 
       // Re-render
       this.render();
+
+      // Auto-ajustar el zoom para mostrar todo el contenido visible
+      this.autoAdjustZoom();
+
+      // Actualizar la transformación
+      this.updateTransformation();
     }
 
     /**
@@ -1147,6 +1279,12 @@ class SimpleOrgChart {
 
       // Re-render
       this.render();
+
+      // Auto-ajustar el zoom para mostrar todo el contenido visible
+      this.autoAdjustZoom();
+
+      // Actualizar la transformación
+      this.updateTransformation();
     }
 
     /**
@@ -1184,12 +1322,24 @@ class SimpleOrgChart {
     /**
      * Updates the chart with new data
      * @param {Object} newData - New data for the chart
+     * @param {Object} [options] - Optional new options to apply
      */
-    update(newData) {
+    update(newData, options = null) {
+      // If new options are provided, update them
+      if (options) {
+        this.options = { ...this.options, ...options };
+      }
+
       this.data = newData;
       this.hierarchicalData = null;
       this.expandedNodes = new Map();
       this.initialize();
+
+      // Auto-ajustar el zoom al cargar nuevos datos
+      this.autoAdjustZoom();
+
+      // Actualizar la transformación
+      this.updateTransformation();
     }
 
     /**
@@ -1370,6 +1520,79 @@ class SimpleOrgChart {
 
       // Add the container to the DOM
       this.container.appendChild(controlsContainer);
+
+      // Crear los controles de ordenamiento
+      if (this.options.showSortControls) {
+        this.createSortControls();
+      }
+    }
+
+    /**
+     * Creates sort controls to allow changing the ordering of the chart
+     */
+    createSortControls() {
+      const sortControlsContainer = document.createElement('div');
+      sortControlsContainer.className = 'controles-orden';
+
+      // Label for the sort selector
+      const sortLabel = document.createElement('label');
+      sortLabel.textContent = 'Ordenar por: ';
+      sortLabel.className = 'etiqueta-orden';
+
+      // Create sort dropdown
+      const sortSelect = document.createElement('select');
+      sortSelect.className = 'selector-orden';
+
+      // Add sort options
+      const sortOptions = [
+        { value: 'name', text: 'Nombre' },
+        { value: 'title', text: 'Cargo' },
+        { value: 'id', text: 'ID' }
+      ];
+
+      sortOptions.forEach(option => {
+        const optElement = document.createElement('option');
+        optElement.value = option.value;
+        optElement.textContent = option.text;
+        // Select the current sort option
+        if (option.value === this.options.sortBy) {
+          optElement.selected = true;
+        }
+        sortSelect.appendChild(optElement);
+      });
+
+      // Direction button
+      const directionBtn = document.createElement('button');
+      directionBtn.className = 'btn-direccion';
+      directionBtn.innerHTML = this.options.sortDirection === 'asc' ? '↑' : '↓';
+      directionBtn.title = this.options.sortDirection === 'asc' ? 'Ascendente' : 'Descendente';
+
+      // Apply button
+      const applyBtn = document.createElement('button');
+      applyBtn.className = 'btn-aplicar';
+      applyBtn.textContent = 'Aplicar';
+
+      // Add event listeners
+      directionBtn.addEventListener('click', () => {
+        const newDirection = directionBtn.innerHTML === '↑' ? 'desc' : 'asc';
+        directionBtn.innerHTML = newDirection === 'asc' ? '↑' : '↓';
+        directionBtn.title = newDirection === 'asc' ? 'Ascendente' : 'Descendente';
+      });
+
+      applyBtn.addEventListener('click', () => {
+        const sortBy = sortSelect.value;
+        const sortDirection = directionBtn.innerHTML === '↑' ? 'asc' : 'desc';
+        this.changeSortOrder(sortBy, sortDirection);
+      });
+
+      // Add elements to the container
+      sortControlsContainer.appendChild(sortLabel);
+      sortControlsContainer.appendChild(sortSelect);
+      sortControlsContainer.appendChild(directionBtn);
+      sortControlsContainer.appendChild(applyBtn);
+
+      // Add the sort controls to the DOM
+      this.container.appendChild(sortControlsContainer);
     }
 
     /**
@@ -1435,6 +1658,114 @@ class SimpleOrgChart {
         const delta = e.deltaY < 0 ? 0.1 : -0.1;
         this.adjustZoom(delta);
       });
+    }
+
+    /**
+     * Sorts the nodes in the tree according to configured options
+     * @param {Array} nodes - The nodes to sort (sorted in place)
+     * @param {number} level - Current level in the tree (for level-specific sorting)
+     */
+    sortNodes(nodes, level = 0) {
+        if (!nodes || !nodes.length || !this.options.sortBy) {
+            return; // No sorting needed
+        }
+
+        // If there's a custom sort function, use it
+        if (this.options.sortBy === 'custom' && typeof this.options.sortFunction === 'function') {
+            nodes.sort((a, b) => this.options.sortFunction(a, b, level));
+        } else {
+            // Standard sorting based on property
+            const sortField = this.options.sortBy;
+            const isAscending = this.options.sortDirection !== 'desc';
+
+            nodes.sort((a, b) => {
+                let valA = a[sortField];
+                let valB = b[sortField];
+
+                // Handle undefined or null values
+                if (valA === undefined || valA === null) valA = '';
+                if (valB === undefined || valB === null) valB = '';
+
+                // Handle string comparisons case-insensitively
+                if (typeof valA === 'string' && typeof valB === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+
+                if (valA < valB) return isAscending ? -1 : 1;
+                if (valA > valB) return isAscending ? 1 : -1;
+
+                // Si tienen el mismo valor en el campo principal, usar el ID como desempate
+                return isAscending ? (a.id - b.id) : (b.id - a.id);
+            });
+        }
+
+        // After sorting this level, sort each node's children recursively
+        for (const node of nodes) {
+            if (node.children && node.children.length) {
+                this.sortNodes(node.children, level + 1);
+            }
+        }
+    }
+
+    /**
+     * Changes the sort options and re-renders the chart
+     * @param {string} sortBy - Field to sort by ('name', 'title', 'id', 'custom')
+     * @param {string} sortDirection - Sort direction ('asc' or 'desc')
+     * @param {Function} [sortFunction] - Custom sort function when sortBy is 'custom'
+     */
+    changeSortOrder(sortBy, sortDirection = 'asc', sortFunction = null) {
+        this.options.sortBy = sortBy;
+        this.options.sortDirection = sortDirection;
+
+        if (sortBy === 'custom' && typeof sortFunction === 'function') {
+            this.options.sortFunction = sortFunction;
+        }
+
+        // Store the current expanded state of nodes
+        const expandedStates = new Map(this.expandedNodes);
+
+        // Reprocess data with new sort order
+        // En lugar de establecer hierarchicalData a null, aplicamos el ordenamiento
+        // directamente a la estructura existente para preservar otras propiedades
+        if (this.hierarchicalData) {
+            const sortAllLevels = (nodes, level) => {
+                this.sortNodes(nodes, level);
+                for (const node of nodes) {
+                    if (node.children && node.children.length > 0) {
+                        sortAllLevels(node.children, level + 1);
+                    }
+                }
+            };
+
+            sortAllLevels(this.hierarchicalData, 0);
+        } else {
+            this.processData();
+        }
+
+        // Restore expanded states
+        this.expandedNodes = expandedStates;
+
+        // Recalculate dimensions and re-render
+        this.calculateDimensions();
+        this.render();
+
+        // Auto-ajustar el zoom al reordenar
+        this.autoAdjustZoom();
+
+        // Actualizar la transformación
+        this.updateTransformation();
+    }
+
+    /**
+     * Expone el método changeSortOrder para su uso externo
+     * @param {string} sortBy - Campo por el cual ordenar los nodos
+     * @param {string} sortDirection - Dirección del ordenamiento ('asc' o 'desc')
+     * @param {Function} [sortFunction] - Función personalizada para ordenamiento cuando sortBy es 'custom'
+     * @public
+     */
+    setSortOrder(sortBy, sortDirection = 'asc', sortFunction = null) {
+      this.changeSortOrder(sortBy, sortDirection, sortFunction);
     }
   }
 
