@@ -117,11 +117,19 @@
 
 .controles-zoom input[type="range"] {
   width: 100px;
-  margin: 0 10px;
+  margin: 0 8px;
 }
 
 .controles-zoom .zoom-valor {
-  width: 40px;
+  min-width: 40px;
   text-align: center;
   font-size: 12px;
+}
+
+.btn-zoom-out, .btn-zoom-in, .btn-zoom-reset {
+  cursor: pointer;
+}
+
+.btn-zoom-reset {
+  margin-left: 5px;
 }

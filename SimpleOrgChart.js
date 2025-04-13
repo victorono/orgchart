@@ -80,6 +80,9 @@ class SimpleOrgChart {
 
       // Render
       this.render();
+
+      // Centrar el organigrama en el contenedor después de la renderización
+      this.centerOrgChart();
     }
 
     /**
@@ -414,18 +417,31 @@ class SimpleOrgChart {
       // Get current expansion state
       const currentState = this.expandedNodes.get(nodeId);
 
-      // Save current zoom before making changes
+      // Save current zoom and viewport state before making changes
       const currentZoom = this.currentScale;
-      const currentTranslationX = this.translationX;
-      const currentTranslationY = this.translationY;
+      const containerRect = this.container.getBoundingClientRect();
+
+      // Get current viewBox information
+      const viewBoxWidth = containerRect.width / currentZoom;
+      const viewBoxHeight = containerRect.height / currentZoom;
+      const centerX = (-this.translationX / currentZoom) + (viewBoxWidth / 2);
+      const centerY = (-this.translationY / currentZoom) + (viewBoxHeight / 2);
 
       // Get current node position before any change
       const nodePosition = this.nodePositions[nodeId];
       const nodeX = nodePosition ? nodePosition.x : null;
       const nodeLevel = nodePosition ? nodePosition.level : null;
 
-      // Save a map of current connections before the change
-      const originalConnections = this.mapCurrentConnections();
+      // Calculate node's position relative to the viewBox center
+      let nodeRelativeX = 0;
+      let nodeRelativeY = 0;
+
+      if (nodeX !== null && nodeLevel !== null) {
+        // Position Y del nodo (calculada igual que en renderNode)
+        const nodeY = nodeLevel * (this.options.nodeHeight + this.options.verticalSpacing) + 50;
+        nodeRelativeX = nodeX - centerX;
+        nodeRelativeY = nodeY - centerY;
+      }
 
       // Change to opposite state
       this.expandedNodes.set(nodeId, !currentState);
@@ -455,34 +471,31 @@ class SimpleOrgChart {
       // Re-render the organizational chart
       this.render();
 
-      // If we had a valid node position before the change, adjust to keep it in view
+      // Restaurar el zoom original
+      this.currentScale = currentZoom;
+      this.zoomSlider.value = currentZoom;
+      this.zoomLabel.textContent = `${Math.round(currentZoom * 100)}%`;
+
+      // Ahora ajustamos la posición para mantener el nodo clickeado en la misma posición relativa al centro
       if (nodeX !== null && nodeLevel !== null) {
-        // Get the new position of the same node
+        // Obtener la nueva posición del nodo
         const newPosition = this.nodePositions[nodeId];
 
         if (newPosition) {
-          // Calculate node displacement
-          const deltaX = newPosition.x - nodeX;
+          // Calcular la nueva posición Y del nodo
+          const newNodeY = newPosition.level * (this.options.nodeHeight + this.options.verticalSpacing) + 50;
 
-          // Adjust translation to compensate for node movement
-          // This keeps the expanded/collapsed node in the same visual position
-          this.translationX = currentTranslationX - deltaX * currentZoom;
-        } else {
-          // If we can't find the new position, keep the previous translation
-          this.translationX = currentTranslationX;
+          // Calcular el nuevo centro deseado para mantener la misma posición relativa
+          const newCenterX = newPosition.x - nodeRelativeX;
+          const newCenterY = newNodeY - nodeRelativeY;
+
+          // Calcular las nuevas traducciones para lograr ese centro
+          this.translationX = -(newCenterX - (viewBoxWidth / 2)) * currentZoom;
+          this.translationY = -(newCenterY - (viewBoxHeight / 2)) * currentZoom;
         }
-      } else {
-        // If no position was available, keep the previous translation
-        this.translationX = currentTranslationX;
       }
 
-      // Restore Y position and zoom
-      this.translationY = currentTranslationY;
-      this.currentScale = currentZoom;
-
-      // Update interface elements to reflect maintained zoom
-      this.zoomSlider.value = currentZoom;
-      this.zoomLabel.textContent = `${Math.round(currentZoom * 100)}%`;
+      // Actualizar la transformación para reflejar los cambios
       this.updateTransformation();
     }
 
@@ -543,16 +556,18 @@ class SimpleOrgChart {
       // Configure drag events
       this.configureDrag();
 
+      // IMPORTANTE: Initialize transformation values BEFORE rendering and centering
+      this.currentScale = 1;
+      this.translationX = 0;
+      this.translationY = 0;
+
       // Render the chart based on calculated positions
       this.renderChart();
 
-      // Initialize transformation
-      this.currentScale = 1;
-
-      // Initially center the chart in the container
+      // Center the chart (ahora las transformaciones ya están inicializadas)
       this.centerChart();
 
-      // Update transformation
+      // Update transformation to reflect changes
       this.updateTransformation();
     }
 
@@ -560,204 +575,146 @@ class SimpleOrgChart {
      * Centers the chart in the container
      */
     centerChart() {
-      // Get container dimensions
+      // Obtener dimensiones del contenedor
       const containerRect = this.container.getBoundingClientRect();
-      const containerCenterX = containerRect.width / 2;
-      const containerCenterY = containerRect.height / 2;
+      const containerWidth = containerRect.width;
+      const containerHeight = containerRect.height;
 
-      // If there is only one root node, center on that node
+      // Si hay un solo nodo raíz, centrarlo
       if (this.hierarchicalData.length === 1) {
         const rootNodeId = this.hierarchicalData[0].id;
         const rootNodeInfo = this.nodePositions[rootNodeId];
+
         if (rootNodeInfo) {
-          // Calculate the position of the root node
-          const rootNodeX = rootNodeInfo.x;
-          // Use a fixed and lower Y position for the head of the chart
-          const rootNodeY = 50; // Y position of the root node is always 50
-          // Calculate translation to center horizontally and place the head higher
-          this.translationX = containerCenterX - rootNodeX;
-          // Position the root node at approximately 1/4 of the container height
-          this.translationY = containerRect.height * 0.25 - rootNodeY;
+          // Calcular la traducción para centrar el nodo raíz horizontalmente
+          this.translationX = (containerWidth / 2) - rootNodeInfo.x;
+          // Posicionar un poco más arriba - solo un 10% desde la parte superior
+          this.translationY = 50;
         } else {
-          this.centerOnSVG();
+          this.centerOnSVG(containerWidth, containerHeight);
         }
       } else {
-        // Center on the entire SVG but adjust the vertical position
-        this.translationX = (containerRect.width - this.svgWidth * this.currentScale) / 2;
-        // Place the chart higher (at a quarter of the container)
-        this.translationY = containerRect.height * 0.25 - 50;
+        this.centerOnSVG(containerWidth, containerHeight);
       }
 
-      // Ensure the Y translation is never negative
+      // Asegurar que la traducción en Y nunca sea negativa
       if (this.translationY < 0) {
-        this.translationY = 20; // Minimum top margin
+        this.translationY = 20; // Margen superior mínimo
       }
     }
 
     /**
      * Centers the view on the entire SVG
+     * @param {number} containerWidth - Container width
+     * @param {number} containerHeight - Container height
      */
-    centerOnSVG() {
-      const containerRect = this.container.getBoundingClientRect();
-      // Calculate translation to center horizontally
-      this.translationX = (containerRect.width - this.svgWidth * this.currentScale) / 2;
-      // For vertical translation, position at 1/4 of the container
-      this.translationY = containerRect.height * 0.25 - 50;
+    centerOnSVG(containerWidth = null, containerHeight = null) {
+      // Si no se proporcionan dimensiones, obtenerlas
+      if (containerWidth === null || containerHeight === null) {
+        const containerRect = this.container.getBoundingClientRect();
+        containerWidth = containerRect.width;
+        containerHeight = containerRect.height;
+      }
 
-      // Ensure the Y translation is never negative
+      // Calcular la traducción para centrar horizontalmente
+      this.translationX = (containerWidth - this.svgWidth) / 2;
+      // Posición vertical fija y cercana a la parte superior
+      this.translationY = 50;
+
+      // Asegurar que la traducción en Y nunca sea negativa
       if (this.translationY < 0) {
-        this.translationY = 20; // Minimum top margin
+        this.translationY = 20; // Margen superior mínimo
       }
-    }
-
-    /**
-     * Resets the view to the initial position and zoom
-     */
-    resetView() {
-      this.currentScale = 1;
-      this.centerChart();
-      this.zoomSlider.value = 1;
-      this.zoomLabel.textContent = '100%';
-      this.updateTransformation();
-    }
-
-    /**
-     * Creates zoom controls
-     */
-    createZoomControls() {
-      const controlsContainer = document.createElement('div');
-      controlsContainer.className = 'controles-zoom';
-
-      // Configure the container to be compact
-      controlsContainer.style.display = 'flex';
-      controlsContainer.style.flexDirection = 'row';
-      controlsContainer.style.alignItems = 'center';
-
-      // Zoom out button
-      const zoomOutButton = document.createElement('button');
-      zoomOutButton.innerHTML = '−';
-      zoomOutButton.title = 'Reduce';
-      zoomOutButton.addEventListener('click', () => this.adjustZoom(-0.1));
-
-      // Zoom slider - Modificado para permitir hasta 300% de zoom
-      const zoomSlider = document.createElement('input');
-      zoomSlider.type = 'range';
-      zoomSlider.min = '0.5';
-      zoomSlider.max = '3'; // Cambiado de 2 a 3 para 300%
-      zoomSlider.step = '0.1';
-      zoomSlider.value = '1';
-      zoomSlider.style.margin = '0 8px';
-      zoomSlider.addEventListener('input', (e) => this.setZoom(parseFloat(e.target.value)));
-
-      // Label with zoom value
-      const zoomValue = document.createElement('span');
-      zoomValue.className = 'zoom-valor';
-      zoomValue.textContent = '100%';
-      zoomValue.style.minWidth = '40px';
-      zoomValue.style.textAlign = 'center';
-      this.zoomLabel = zoomValue;
-
-      // Zoom in button
-      const zoomInButton = document.createElement('button');
-      zoomInButton.innerHTML = '+';
-      zoomInButton.title = 'Enlarge';
-      zoomInButton.addEventListener('click', () => this.adjustZoom(0.1));
-
-      // Reset zoom button
-      const resetButton = document.createElement('button');
-      resetButton.innerHTML = '↺';
-      resetButton.title = 'Reset view';
-      resetButton.addEventListener('click', () => this.resetView());
-
-      // Add elements to the container
-      controlsContainer.appendChild(zoomOutButton);
-      controlsContainer.appendChild(zoomSlider);
-      controlsContainer.appendChild(zoomValue);
-      controlsContainer.appendChild(zoomInButton);
-      controlsContainer.appendChild(resetButton);
-
-      // Store references for later use
-      this.zoomSlider = zoomSlider;
-
-      // Ensure the container has relative position for correct positioning
-      if (getComputedStyle(this.container).position === 'static') {
-        this.container.style.position = 'relative';
-      }
-
-      // Add the container to the DOM
-      this.container.appendChild(controlsContainer);
-    }
-
-    /**
-     * Configures events to allow dragging the chart
-     */
-    configureDrag() {
-      let isDragging = false;
-      let startX = 0;
-      let startY = 0;
-
-      // Mouse events
-      this.svg.addEventListener('mousedown', (e) => {
-        if (e.button === 0) { // Only main mouse button
-          isDragging = true;
-          startX = e.clientX - this.translationX;
-          startY = e.clientY - this.translationY;
-          this.svg.classList.add('arrastrando');
-        }
-      });
-
-      window.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-          e.preventDefault();
-          this.translationX = e.clientX - startX;
-          this.translationY = e.clientY - startY;
-          this.updateTransformation();
-        }
-      });
-
-      window.addEventListener('mouseup', () => {
-        isDragging = false;
-        this.svg.classList.remove('arrastrando');
-      });
-
-      // Touch events for mobile devices
-      this.svg.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-          e.preventDefault();
-          isDragging = true;
-          startX = e.touches[0].clientX - this.translationX;
-          startY = e.touches[0].clientY - this.translationY;
-          this.svg.classList.add('arrastrando');
-        }
-      });
-
-      window.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length === 1) {
-          e.preventDefault();
-          this.translationX = e.touches[0].clientX - startX;
-          this.translationY = e.touches[0].clientY - startY;
-          this.updateTransformation();
-        }
-      });
-
-      window.addEventListener('touchend', () => {
-        isDragging = false;
-        this.svg.classList.remove('arrastrando');
-      });
-
-      // Mouse wheel event for zoom
-      this.svg.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const delta = e.deltaY < 0 ? 0.1 : -0.1;
-        this.adjustZoom(delta);
-      });
     }
 
     /**
      * Updates the transformation applied to the main group to reflect zoom and position
      */
     updateTransformation() {
-      this.draggableGroup.setAttribute('transform', `translate(${this.translationX},${this.translationY}) scale(${this.currentScale})`);
+      // Aplicar la transformación al grupo arrastrable
+      this.draggableGroup.setAttribute('transform', `translate(${this.translationX},${this.translationY})`);
+
+      // Ajustar el tamaño del SVG para acomodar el nivel de zoom
+      this.updateSVGViewBox();
+    }
+
+    /**
+     * Centra el organigrama en el contenedor con un retraso para asegurar
+     * que todos los elementos estén correctamente renderizados
+     */
+    centerOrgChart() {
+      // Usar setTimeout para asegurar que todos los elementos estén renderizados
+      setTimeout(() => {
+        // Si hay un nodo raíz, enfócalo específicamente
+        if (this.hierarchicalData && this.hierarchicalData.length > 0) {
+          const rootNodeId = this.hierarchicalData[0].id;
+
+          // Ajustar el viewBox para asegurar que el nodo raíz esté visible
+          if (this.nodePositions && this.nodePositions[rootNodeId]) {
+            const rootPos = this.nodePositions[rootNodeId];
+
+            // Obtener dimensiones del contenedor
+            const containerRect = this.container.getBoundingClientRect();
+            const containerWidth = containerRect.width;
+
+            // Centrar el nodo raíz horizontalmente
+            this.translationX = (containerWidth / 2) - rootPos.x;
+
+            // Posición vertical fija para asegurar que el nodo raíz esté visible
+            this.translationY = 50;
+
+            // Actualizar el viewBox SVG y aplicar transformaciones
+            this.updateTransformation();
+          }
+        } else {
+          // Si no hay nodo raíz, centrar todo el SVG
+          this.centerChart();
+          this.updateTransformation();
+        }
+      }, 100);
+    }
+
+    /**
+     * Resets the view to center the chart and set zoom to 1
+     */
+    resetView() {
+      // Reset zoom to 1
+      this.currentScale = 1;
+      this.zoomSlider.value = 1;
+      this.zoomLabel.textContent = '100%';
+
+      // Center the chart
+
+      this.centerChart();
+
+      // Update transformation
+      this.updateTransformation();
+    }
+
+    /**
+     * Ajusta el viewBox del SVG para simular zoom sin escalar los elementos
+     */
+    updateSVGViewBox() {
+      // Obtener el tamaño actual del contenedor
+      const containerRect = this.container.getBoundingClientRect();
+      const containerWidth = containerRect.width;
+      const containerHeight = containerRect.height;
+
+      // Calcular el nuevo viewBox basado en el zoom
+      const viewBoxWidth = containerWidth / this.currentScale;
+      const viewBoxHeight = containerHeight / this.currentScale;
+
+      // Calcular el centro del viewBox actual
+      const centerX = (-this.translationX / this.currentScale) + (viewBoxWidth / 2);
+      const centerY = (-this.translationY / this.currentScale) + (viewBoxHeight / 2);
+
+      // Calcular las coordenadas del nuevo viewBox
+      // const viewBoxX = centerX - (viewBoxWidth / 2);
+      const viewBoxX = 0; // adjusted to always start from 0
+      const viewBoxY = centerY - (viewBoxHeight / 2);
+
+      // Actualizar el viewBox del SVG
+      this.svg.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
     }
 
     /**
@@ -765,7 +722,7 @@ class SimpleOrgChart {
      * @param {number} delta - Change in zoom level
      */
     adjustZoom(delta) {
-      const newZoom = Math.max(0.5, Math.min(3, this.currentScale + delta)); // Cambiado de 2 a 3
+      const newZoom = Math.max(0.5, Math.min(3, this.currentScale + delta));
       this.setZoom(newZoom);
     }
 
@@ -774,9 +731,27 @@ class SimpleOrgChart {
      * @param {number} newZoom - New zoom level
      */
     setZoom(newZoom) {
+      // Guardar el centro actual del viewBox antes de cambiar el zoom
+      const containerRect = this.container.getBoundingClientRect();
+      const oldViewBoxWidth = containerRect.width / this.currentScale;
+      const oldViewBoxHeight = containerRect.height / this.currentScale;
+      const centerX = (-this.translationX / this.currentScale) + (oldViewBoxWidth / 2);
+      const centerY = (-this.translationY / this.currentScale) + (oldViewBoxHeight / 2);
+
+      // Actualizar el nivel de zoom
       this.currentScale = newZoom;
       this.zoomSlider.value = newZoom;
       this.zoomLabel.textContent = `${Math.round(newZoom * 100)}%`;
+
+      // Calcular las nuevas dimensiones del viewBox
+      const newViewBoxWidth = containerRect.width / newZoom;
+      const newViewBoxHeight = containerRect.height / newZoom;
+
+      // Ajustar la traducción para mantener el centro del viewBox
+      this.translationX = -(centerX - (newViewBoxWidth / 2)) * newZoom;
+      this.translationY = -(centerY - (newViewBoxHeight / 2)) * newZoom;
+
+      // Aplicar la transformación actualizada
       this.updateTransformation();
     }
 
@@ -1333,6 +1308,133 @@ class SimpleOrgChart {
           this.adjustSubtreePositions(child, adjustment);
         }
       }
+    }
+
+    /**
+     * Creates zoom controls
+     */
+    createZoomControls() {
+      const controlsContainer = document.createElement('div');
+      controlsContainer.className = 'controles-zoom';
+
+      // Zoom out button
+      const zoomOutButton = document.createElement('button');
+      zoomOutButton.innerHTML = '−';
+      zoomOutButton.title = 'Reduce';
+      zoomOutButton.className = 'btn-zoom-out';
+      zoomOutButton.addEventListener('click', () => this.adjustZoom(-0.1));
+
+      // Zoom slider - Modificado para permitir hasta 300% de zoom
+      const zoomSlider = document.createElement('input');
+      zoomSlider.type = 'range';
+      zoomSlider.min = '0.5';
+      zoomSlider.max = '3'; // Cambiado de 2 a 3 para 300%
+      zoomSlider.step = '0.1';
+      zoomSlider.value = '1';
+      zoomSlider.addEventListener('input', (e) => this.setZoom(parseFloat(e.target.value)));
+
+      // Label with zoom value
+      const zoomValue = document.createElement('span');
+      zoomValue.className = 'zoom-valor';
+      zoomValue.textContent = '100%';
+      this.zoomLabel = zoomValue;
+
+      // Zoom in button
+      const zoomInButton = document.createElement('button');
+      zoomInButton.innerHTML = '+';
+      zoomInButton.title = 'Enlarge';
+      zoomInButton.className = 'btn-zoom-in';
+      zoomInButton.addEventListener('click', () => this.adjustZoom(0.1));
+
+      // Reset zoom button
+      const resetButton = document.createElement('button');
+      resetButton.innerHTML = '↺';
+      resetButton.title = 'Reset view';
+      resetButton.className = 'btn-zoom-reset';
+      resetButton.addEventListener('click', () => this.resetView());
+
+      // Add elements to the container
+      controlsContainer.appendChild(zoomOutButton);
+      controlsContainer.appendChild(zoomSlider);
+      controlsContainer.appendChild(zoomValue);
+      controlsContainer.appendChild(zoomInButton);
+      controlsContainer.appendChild(resetButton);
+
+      // Store references for later use
+      this.zoomSlider = zoomSlider;
+
+      // Ensure the container has relative position for correct positioning
+      if (getComputedStyle(this.container).position === 'static') {
+        this.container.style.position = 'relative';
+      }
+
+      // Add the container to the DOM
+      this.container.appendChild(controlsContainer);
+    }
+
+    /**
+     * Configures events to allow dragging the chart
+     */
+    configureDrag() {
+      let isDragging = false;
+      let startX = 0;
+      let startY = 0;
+
+      // Mouse events
+      this.svg.addEventListener('mousedown', (e) => {
+        if (e.button === 0) { // Solo botón principal del ratón
+          isDragging = true;
+          startX = e.clientX - this.translationX;
+          startY = e.clientY - this.translationY;
+          this.svg.classList.add('arrastrando');
+        }
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+          e.preventDefault();
+          this.translationX = e.clientX - startX;
+          this.translationY = e.clientY - startY;
+          this.updateTransformation();
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+        this.svg.classList.remove('arrastrando');
+      });
+
+      // Eventos táctiles para dispositivos móviles
+      this.svg.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          e.preventDefault();
+          isDragging = true;
+          startX = e.touches[0].clientX - this.translationX;
+          startY = e.touches[0].clientY - this.translationY;
+          this.svg.classList.add('arrastrando');
+        }
+      });
+
+      window.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches.length === 1) {
+          e.preventDefault();
+          this.translationX = e.touches[0].clientX - startX;
+          this.translationY = e.touches[0].clientY - startY;
+          this.updateTransformation();
+        }
+      });
+
+      window.addEventListener('touchend', () => {
+        isDragging = false;
+        this.svg.classList.remove('arrastrando');
+      });
+
+      // Evento de rueda del ratón para zoom
+      this.svg.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.1 : -0.1;
+        this.adjustZoom(delta);
+      });
     }
   }
 
