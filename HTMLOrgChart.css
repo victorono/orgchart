@@ -1,0 +1,418 @@
+/* HTMLOrgChart.css - Estilos para organigrama usando UL/LI */
+
+/* Contenedor principal del organigrama */
+.org-chart-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 500px;
+  overflow: visible;
+  transform-origin: center;
+  cursor: grab;
+  transition: transform 0.1s;
+  padding: 20px;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  touch-action: none; /* Importante para dispositivos táctiles */
+}
+
+.org-chart-container.dragging {
+  cursor: grabbing !important;
+}
+
+/* El organigrama en sí */
+.organigrama {
+  display: inline-block;
+  position: relative;
+  text-align: center;
+  background-color: #ffffff;
+}
+
+/* Estilos para las listas UL */
+.organigrama .nodes {
+  padding: 0;
+  margin: 0;
+  list-style-type: none;
+  display: flex;
+  position: relative;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* Items de la jerarquía */
+.organigrama .hierarchy {
+  padding: 0;
+  margin: 0 10px;
+  position: relative;
+  list-style-type: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Para nodos colapsados */
+.organigrama .isChildrenCollapsed > ul.nodes {
+  display: none;
+}
+
+.organigrama .hidden {
+  display: none !important;
+}
+
+/* Nodo individual */
+.organigrama .node {
+  position: relative;
+  display: inline-block;
+  width: 180px;
+  padding: 0;
+  border-radius: 10px;
+  /* box-shadow: 0 1px 10px rgba(0,0,0,0.1); */
+  background-color: #fff;
+  /* border: 1px solid #e5e7eb; */
+  text-align: center;
+  vertical-align: top;
+  margin: 0 10px 30px 10px;
+  z-index: 10;
+}
+
+/* Estilo para mostrar que el nodo es clicable */
+.organigrama .node.clickable {
+  cursor: pointer;
+}
+
+/* .organigrama .node.clickable:hover {
+  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  transition: transform 0.2s, box-shadow 0.2s;
+} */
+
+/* Título del nodo */
+.organigrama .node .title {
+  background-color: #f3f4f6;
+  border-radius: 10px 10px 0 0;
+  padding: 5px 0;
+  font-weight: 600;
+  color: #4b5563;
+  font-size: 14px;
+  height: 30px;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+}
+
+/* Ícono de líder */
+.organigrama .node .symbol {
+  margin-right: 5px;
+  color: #4ade80;
+}
+
+/* Contenido del nodo */
+.organigrama .node .content {
+  padding: 0;
+  font-size: 12px;
+}
+
+/* Figura/imagen del perfil */
+.organigrama .node figure {
+  margin: 0 auto;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border-color: #4ade80;
+  border-style: solid;
+  overflow: hidden;
+  background-color: #f9fafb;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.organigrama .node figure svg {
+  width: 80px;
+  height: 80px;
+  display: block;
+  overflow: visible;
+}
+
+/* Avatar placeholder cuando no hay imagen */
+.organigrama .avatar-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #4ade80;
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+/* Estilos para el nombre */
+.organigrama .c-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+  margin: 10px 0 5px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Separador */
+.organigrama .node .content hr {
+  margin: 5px 0;
+  border-color: #e5e7eb;
+}
+
+/* Estilos para el cargo */
+.organigrama .c-job {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 5px 0;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Líneas de conexión entre nodos - usando pseudo-elementos para mayor consistencia */
+.organigrama .hierarchy::before,
+.organigrama .hierarchy::after,
+.organigrama .hierarchy > ul.nodes::before {
+  content: '' !important;
+  position: absolute !important;
+  background-color: #4ade80 !important;
+  z-index: 1 !important;
+  display: block !important;
+}
+
+/* Línea vertical desde el nodo hacia abajo */
+.organigrama .hierarchy.isOpen::after {
+  /*
+  width: 2px !important;
+  height: 30px !important;
+  top: 128px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  */
+}
+
+/* Líneas verticales hacia cada hijo */
+.organigrama .hierarchy > ul.nodes > li::before {
+  content: '' !important;
+  position: absolute !important;
+  background-color: #4ade80 !important;
+  width: 2px !important;
+  height: 20px !important;
+  top: -20px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 1 !important;
+  display: block !important;
+}
+
+/* Línea horizontal entre nodos hermanos - siempre visible */
+/*
+.organigrama .hierarchy > ul.nodes::before {
+  height: 2px !important;
+  background-color: #4ade80 !important;
+  top: -20px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  display: block !important;
+  min-width: 60% !important;
+}
+*/
+
+/* Ocultar la línea horizontal solo cuando hay un único hijo */
+.organigrama .hierarchy > ul.nodes:has(> li:only-child)::before {
+  display: none !important;
+}
+
+/* Para navegadores que no soportan :has */
+.organigrama .hierarchy > ul.nodes:not(:has(> li + li))::before {
+  display: none !important;
+}
+
+/* Nodo individual */
+.organigrama .node {
+  z-index: 10; /* Asegurar que los nodos estén por encima de las líneas */
+  position: relative;
+}
+
+/* Botones de expansión/colapso */
+.organigrama .edge {
+  position: absolute;
+  cursor: pointer;
+  background-color: #fff;
+  border: 1px solid #4ade80;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4ade80;
+  z-index: 11; /* Mayor que el nodo para estar encima */
+}
+
+.organigrama .edge:hover {
+  background-color: #edf9f0;
+  border-color: #3acd74;
+}
+
+/* Posicionamiento específico de los botones */
+.organigrama .edge.bottomEdge {
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Posicionamiento en el lado derecho centrado verticalmente */
+.organigrama .edge.rightEdge {
+  right: 30px;
+  top: 30%;
+  transform: translateY(-50%);
+}
+
+/* Número de hijos */
+.organigrama .node-children-text {
+  position: absolute;
+  top: -8px;
+  right: -5px;
+  background-color: #4ade80;
+  color: white;
+  font-size: 10px;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Iconos específicos */
+.oci-chevron-right:before { content: '›'; }
+.oci-chevron-left:before { content: '‹'; }
+
+/* Iconos específicos para los botones de expansión/contracción */
+.oci-plus:before { content: '+'; }
+.oci-minus:before { content: '−'; }
+
+/* Estilos para pantallas pequeñas */
+@media (max-width: 768px) {
+  .organigrama .nodes {
+    overflow-x: auto;
+  }
+
+  .organigrama .node {
+    width: 150px;
+    margin: 0 5px 20px 5px;
+  }
+
+  .organigrama .node figure {
+    width: 60px;
+    height: 60px;
+  }
+
+  .organigrama .node figure svg {
+    width: 60px;
+    height: 60px;
+  }
+
+  .organigrama .c-name {
+    font-size: 12px;
+  }
+
+  .organigrama .c-job {
+    font-size: 10px;
+  }
+}
+
+/* Estilos para los controles */
+.org-controls {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+  z-index: 100;
+  background: white;
+  border-radius: 4px;
+  padding: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.org-zoom-controls {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.org-zoom-controls button {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #4b5563;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.org-zoom-controls button:hover {
+  background: #f3f4f6;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.1);
+}
+
+.org-sort-controls {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.org-sort-controls button {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #4b5563;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.org-sort-controls button:hover {
+  background: #f3f4f6;
+}
+
+/* Ajustes para nodos extremos */
+.organigrama .hierarchy.first-child-node {
+  margin-left: 25px; /* Desplazar primer hijo hacia la derecha */
+}
+
+.organigrama .hierarchy.last-child-node {
+  margin-right: 25px; /* Desplazar último hijo hacia la izquierda */
+}
+
+/* Ajustar el ancho y posición de las líneas horizontales */
+.organigrama .hierarchy > ul.nodes::before {
+  width: auto !important; /* El ancho se ajustará dinámicamente por JavaScript */
+  height: 2px;
+  top: -20px;
+  margin: 0;
+}

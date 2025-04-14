@@ -47,6 +47,7 @@ class SimpleOrgChart {
         sortDirection: 'asc', // 'asc' o 'desc'
         sortFunction: null, // Función personalizada para ordenar
         showSortControls: false, // Mostrar controles de ordenación
+        initialZoom: 0.8, // Zoom inicial
       };
 
       // Merge default options with provided ones
@@ -139,14 +140,17 @@ class SimpleOrgChart {
       // Remove duplicates from the tree
       this.removeDuplicates(rootNodes);
 
+      // Asegurarse de que los nodos raíz estén ordenados correctamente
+      this.sortNodes(rootNodes, 0);
+
       // Sort all nodes at every level of the tree consistently
       const sortAllLevels = (nodes, level) => {
-        // First sort this level
-        this.sortNodes(nodes, level);
+        // Ya ordenamos los nodos de este nivel
 
-        // Then recursively sort all children
+        // Ordenar recursivamente los hijos
         for (const node of nodes) {
           if (node.children && node.children.length > 0) {
+            this.sortNodes(node.children, level + 1);
             sortAllLevels(node.children, level + 1);
           }
         }
@@ -451,7 +455,9 @@ class SimpleOrgChart {
         const currentNode = this.findNodeById(nodeId);
         if (currentNode && currentNode.children && currentNode.children.length > 0) {
           // Ordenar los hijos según el criterio actual antes de mostrarlos
-          this.sortNodes(currentNode.children, currentNode.level + 1);
+          const childrenCopy = [...currentNode.children]; // Crear una copia para evitar problemas
+          this.sortNodes(childrenCopy, (currentNode.level || 0) + 1);
+          currentNode.children = childrenCopy; // Reemplazar con la versión ordenada
 
           // Make sure immediate children are visible
           currentNode.children.forEach(child => {
@@ -683,9 +689,15 @@ class SimpleOrgChart {
       this.configureDrag();
 
       // IMPORTANTE: Initialize transformation values BEFORE rendering and centering
-      this.currentScale = 1;
+      this.currentScale = this.options.initialZoom;
       this.translationX = 0;
       this.translationY = 0;
+
+      // Actualizar el valor del slider de zoom para reflejar el zoom inicial
+      if (this.zoomSlider) {
+        this.zoomSlider.value = this.options.initialZoom;
+        this.zoomLabel.textContent = `${Math.round(this.options.initialZoom * 100)}%`;
+      }
 
       // Render the chart based on calculated positions
       this.renderChart();
@@ -757,11 +769,28 @@ class SimpleOrgChart {
      * Updates the transformation applied to the main group to reflect zoom and position
      */
     updateTransformation() {
-      // Aplicar la transformación al grupo arrastrable
-      this.draggableGroup.setAttribute('transform', `translate(${this.translationX},${this.translationY})`);
+      // Aplicar la transformación al grupo arrastrable incluyendo el zoom
+      this.draggableGroup.setAttribute('transform', `translate(${this.translationX},${this.translationY}) scale(${this.currentScale})`);
 
-      // Ajustar el tamaño del SVG para acomodar el nivel de zoom
-      this.updateSVGViewBox();
+      // Ajustar el grosor de las líneas de conexión basado en la escala inversa
+      // para mantenerlas visibles independientemente del nivel de zoom
+      const strokeWidth = 2 / this.currentScale;
+      const lineElements = this.svg.querySelectorAll('.linea-conexion');
+      lineElements.forEach(line => {
+        line.setAttribute('stroke-width', strokeWidth);
+      });
+
+      // No necesitamos actualizar el viewBox cuando usamos scale en la transformación
+      // ya que el viewBox se maneja automáticamente con el contenido escalado
+    }
+
+    /**
+     * Ajusta el viewBox del SVG para simular zoom sin escalar los elementos
+     */
+    updateSVGViewBox() {
+      // Este método ya no es necesario cuando usamos scale en la transformación
+      // pero lo mantenemos para compatibilidad con el código existente
+      // en caso de que se llame desde otros lugares
     }
 
     /**
@@ -805,9 +834,10 @@ class SimpleOrgChart {
      */
     resetView() {
       // Reset zoom to 1
-      this.currentScale = 1;
-      this.zoomSlider.value = 1;
-      this.zoomLabel.textContent = '100%';
+      this.currentScale = this.options.initialZoom;
+      this.zoomSlider.value = this.options.initialZoom;
+      this.zoomLabel.textContent = `${Math.round(this.options.initialZoom * 100)}%`;
+
 
       // Center the chart
 
@@ -815,32 +845,6 @@ class SimpleOrgChart {
 
       // Update transformation
       this.updateTransformation();
-    }
-
-    /**
-     * Ajusta el viewBox del SVG para simular zoom sin escalar los elementos
-     */
-    updateSVGViewBox() {
-      // Obtener el tamaño actual del contenedor
-      const containerRect = this.container.getBoundingClientRect();
-      const containerWidth = containerRect.width;
-      const containerHeight = containerRect.height;
-
-      // Calcular el nuevo viewBox basado en el zoom
-      const viewBoxWidth = containerWidth / this.currentScale;
-      const viewBoxHeight = containerHeight / this.currentScale;
-
-      // Calcular el centro del viewBox actual
-      const centerX = (-this.translationX / this.currentScale) + (viewBoxWidth / 2);
-      const centerY = (-this.translationY / this.currentScale) + (viewBoxHeight / 2);
-
-      // Calcular las coordenadas del nuevo viewBox
-      // const viewBoxX = centerX - (viewBoxWidth / 2);
-      const viewBoxX = 0; // adjusted to always start from 0
-      const viewBoxY = centerY - (viewBoxHeight / 2);
-
-      // Actualizar el viewBox del SVG
-      this.svg.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
     }
 
     /**
@@ -1679,6 +1683,9 @@ class SimpleOrgChart {
             const isAscending = this.options.sortDirection !== 'desc';
 
             nodes.sort((a, b) => {
+                // Verificar que los nodos sean válidos
+                if (!a || !b) return 0;
+
                 let valA = a[sortField];
                 let valB = b[sortField];
 
@@ -1692,11 +1699,21 @@ class SimpleOrgChart {
                     valB = valB.toLowerCase();
                 }
 
+                // Comparación de tipos diferentes
+                if (typeof valA !== typeof valB) {
+                    if (typeof valA === 'string') return isAscending ? -1 : 1;
+                    if (typeof valB === 'string') return isAscending ? 1 : -1;
+                }
+
                 if (valA < valB) return isAscending ? -1 : 1;
                 if (valA > valB) return isAscending ? 1 : -1;
 
                 // Si tienen el mismo valor en el campo principal, usar el ID como desempate
-                return isAscending ? (a.id - b.id) : (b.id - a.id);
+                // Asegurar que id sea un número para comparación
+                const idA = Number(a.id) || 0;
+                const idB = Number(b.id) || 0;
+
+                return isAscending ? (idA - idB) : (idB - idA);
             });
         }
 
@@ -1715,6 +1732,15 @@ class SimpleOrgChart {
      * @param {Function} [sortFunction] - Custom sort function when sortBy is 'custom'
      */
     changeSortOrder(sortBy, sortDirection = 'asc', sortFunction = null) {
+        // Verificar que los valores sean válidos para evitar errores
+        if (!sortBy || (sortBy !== 'name' && sortBy !== 'title' && sortBy !== 'id' && sortBy !== 'custom')) {
+            sortBy = 'name'; // Valor predeterminado
+        }
+
+        if (sortDirection !== 'asc' && sortDirection !== 'desc') {
+            sortDirection = 'asc'; // Valor predeterminado
+        }
+
         this.options.sortBy = sortBy;
         this.options.sortDirection = sortDirection;
 
@@ -1725,21 +1751,31 @@ class SimpleOrgChart {
         // Store the current expanded state of nodes
         const expandedStates = new Map(this.expandedNodes);
 
-        // Reprocess data with new sort order
-        // En lugar de establecer hierarchicalData a null, aplicamos el ordenamiento
-        // directamente a la estructura existente para preservar otras propiedades
-        if (this.hierarchicalData) {
-            const sortAllLevels = (nodes, level) => {
-                this.sortNodes(nodes, level);
-                for (const node of nodes) {
-                    if (node.children && node.children.length > 0) {
-                        sortAllLevels(node.children, level + 1);
-                    }
-                }
-            };
+        // Función recursiva para ordenar todos los niveles del árbol
+        const sortAllLevels = (nodes, level) => {
+            // Crear una copia para evitar problemas durante la ordenación
+            const nodesCopy = [...nodes];
 
+            // Ordenar esta copia
+            this.sortNodes(nodesCopy, level);
+
+            // Reemplazar los nodos con la versión ordenada
+            nodes.length = 0;
+            nodes.push(...nodesCopy);
+
+            // Ordenar recursivamente los hijos
+            for (const node of nodes) {
+                if (node && node.children && node.children.length > 0) {
+                    sortAllLevels(node.children, level + 1);
+                }
+            }
+        };
+
+        // Aplicar ordenamiento a la estructura jerárquica actual
+        if (this.hierarchicalData && this.hierarchicalData.length > 0) {
             sortAllLevels(this.hierarchicalData, 0);
         } else {
+            // Si no hay datos jerárquicos, reprocesar los datos
             this.processData();
         }
 
@@ -1755,6 +1791,8 @@ class SimpleOrgChart {
 
         // Actualizar la transformación
         this.updateTransformation();
+
+        return true; // Indicar que la operación fue exitosa
     }
 
     /**
