@@ -1246,7 +1246,9 @@ redrawAllConnectors() {
       }
     });
 
-    // 3. Crear conectores verticales para todos los nodos hijos, aunque sus padres no estén expandidos
+    // 3. Crear conectores verticales para los demás nodos hijos que necesiten conectores
+    // Pero ahora con la verificación mejorada en _createChildConnector, solo se crearán
+    // donde sean necesarios
     const allChildNodes = Array.from(document.querySelectorAll('.organigrama ul.nodes > li'));
     allChildNodes.forEach(node => {
       if (!node.querySelector('.vert-connector')) {
@@ -1256,6 +1258,56 @@ redrawAllConnectors() {
 
   } catch (error) {
     console.error("Error en redrawAllConnectors:", error);
+  }
+}
+
+/**
+ * Crea un conector vertical para un nodo hijo
+ * @param {HTMLElement} childNode - Nodo hijo
+ * @private
+ */
+_createChildConnector(childNode) {
+  try {
+    const nodeDiv = childNode.querySelector('.node');
+    if (!nodeDiv) return;
+
+    // Verificar si este nodo realmente necesita un conector vertical
+    // Un nodo no necesita conector si está en una lista sin un nodo padre visible
+    const parentList = childNode.closest('ul.nodes');
+    if (!parentList) return;
+
+    // Si el nodo padre no está expandido o no existe, no mostrar el conector vertical
+    const parentHierarchy = parentList.closest('.hierarchy');
+    const isParentVisible = parentHierarchy &&
+                            !parentHierarchy.classList.contains('hidden') &&
+                            parentHierarchy.classList.contains('isOpen');
+
+    // Para nodos raíz o cuando el padre no es visible, no mostrar el conector
+    if (!parentHierarchy || !isParentVisible) {
+      // Si el nodo pertenece a la lista de nodos raíz, no crear el conector
+      const isRootNode = parentList.parentElement ===
+                         this.chartContainer.querySelector('.organigrama');
+      if (isRootNode) return;
+    }
+
+    const childConnector = document.createElement('div');
+    childConnector.className = 'vert-connector';
+
+    // Aplicar estilos con CSS en lugar de cálculos en JS
+    Object.assign(childConnector.style, {
+      position: 'absolute',
+      width: '2px',
+      backgroundColor: this.options.lineColor,
+      height: '20px',
+      top: '-20px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '1'
+    });
+
+    childNode.prepend(childConnector);
+  } catch (error) {
+    console.error("Error creando conector del hijo:", error);
   }
 }
 
@@ -1289,45 +1341,6 @@ _createParentConnector(parentNode) {
     parentNode.appendChild(parentConnector);
 } catch (error) {
     console.error("Error creando conector del padre:", error);
-  }
-}
-
-/**
- * Crea un conector vertical para un nodo hijo
- * @param {HTMLElement} childNode - Nodo hijo
- * @priv} catch (error) {
-    console.error("Error creando conector del padre:", error);
-  }
-}
-
-/**
- * Crea un conector vertical para un nodo hijo
- * @param {HTMLElement} childNode - Nodo hijo
-ate
- */
-_createChildConnector(childNode) {
-  try {
-    const nodeDiv = childNode.querySelector('.node');
-    if (!nodeDiv) return;
-
-    const childConnector = document.createElement('div');
-    childConnector.className = 'vert-connector';
-
-    // Aplicar estilos con CSS en lugar de cálculos en JS
-    Object.assign(childConnector.style, {
-      position: 'absolute',
-      width: '2px',
-      backgroundColor: this.options.lineColor,
-      height: '20px',
-      top: '-20px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      zIndex: '1'
-    });
-
-    childNode.prepend(childConnector);
-  } catch (error) {
-    console.error("Error creando conector del hijo:", error);
   }
 }
 
