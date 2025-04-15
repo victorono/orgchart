@@ -290,7 +290,7 @@ class HTMLOrgChart {
     this.sortNodes(rootNodes);
 
     // Log statistics for debugging
-    console.debug(`Data processing: ${data.length} total nodes, ${nodeMap.size} unique nodes, ${rootNodes.length} root nodes, ${duplicateLog.length} resolved duplicates`);
+    // console.debug(`Data processing: ${data.length} total nodes, ${nodeMap.size} unique nodes, ${rootNodes.length} root nodes, ${duplicateLog.length} resolved duplicates`);
 
     // Store processed data
     this.hierarchicalData = rootNodes;
@@ -1550,6 +1550,10 @@ handleResize() {
 
   // Center with current scale
   this.forceCenterWithScale(this.scale);
+}
+
+resize() {
+
 }
 
 /**

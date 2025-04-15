@@ -32,7 +32,7 @@ div#org-chart-container {
 
 /* El organigrama en sí */
 .organigrama {
-  display: inline-block;
+  display: inline;
   position: relative;
   text-align: center;
   background-color: #ffffff;
