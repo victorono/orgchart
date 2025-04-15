@@ -4,18 +4,6 @@
  */
 class HTMLOrgChart {
   constructor(config) {
-    // Constantes para los tiempos de timeout (en milisegundos)
-    this.TIMEOUTS = {
-      INITIAL_CENTER: 300,       // Tiempo para centrar inicialmente
-      CENTER_VERIFICATION: 500,  // Verificación adicional de centrado
-      CONNECTOR_REDRAW: 50,      // Tiempo para redibujar conectores
-      NODE_TOGGLE_UPDATE: 300,   // Tiempo para actualizar DOM después de expandir/colapsar
-      WHEEL_ZOOM_DEBOUNCE: 100,  // Debounce para zoom con rueda
-      RENDER_CONNECTORS: 100,    // Tiempo para renderizar conectores iniciales
-      FULLSCREEN_ADJUST: 100,    // Tiempo para ajuste después de pantalla completa
-      AUTO_ZOOM_ADJUST: 100      // Tiempo para ajuste automático de zoom
-    };
-
     // Validar configuración básica
     if (!config.container) {
       throw new Error('Debe especificarse un contenedor');
@@ -50,10 +38,37 @@ class HTMLOrgChart {
       initialZoom: 0.8,
       minHeight: '300px', // Altura mínima predeterminada
       fullscreenBgColor: '#fff',
+      // Valores predeterminados para los tiempos de timeout (en milisegundos)
+      timeouts: {
+        initialCenter: 300,       // Tiempo para centrar inicialmente
+        centerVerification: 500,  // Verificación adicional de centrado
+        connectorRedraw: 50,      // Tiempo para redibujar conectores
+        nodeToggleUpdate: 300,    // Tiempo para actualizar DOM después de expandir/colapsar
+        wheelZoomDebounce: 100,   // Debounce para zoom con rueda
+        renderConnectors: 100,    // Tiempo para renderizar conectores iniciales
+        fullscreenAdjust: 100,    // Tiempo para ajuste después de pantalla completa
+        autoZoomAdjust: 100       // Tiempo para ajuste automático de zoom
+      }
     };
 
     // Combinar opciones predeterminadas con las proporcionadas
     this.options = { ...defaultOptions, ...(config.options || {}) };
+
+    // Asegurarse de que la propiedad timeouts exista y combinar con valores por defecto
+    if (!this.options.timeouts) this.options.timeouts = {};
+    this.options.timeouts = { ...defaultOptions.timeouts, ...this.options.timeouts };
+
+    // Configurar los timeouts como propiedades para compatibilidad con código existente
+    this.TIMEOUTS = {
+      INITIAL_CENTER: this.options.timeouts.initialCenter,
+      CENTER_VERIFICATION: this.options.timeouts.centerVerification,
+      CONNECTOR_REDRAW: this.options.timeouts.connectorRedraw,
+      NODE_TOGGLE_UPDATE: this.options.timeouts.nodeToggleUpdate,
+      WHEEL_ZOOM_DEBOUNCE: this.options.timeouts.wheelZoomDebounce,
+      RENDER_CONNECTORS: this.options.timeouts.renderConnectors,
+      FULLSCREEN_ADJUST: this.options.timeouts.fullscreenAdjust,
+      AUTO_ZOOM_ADJUST: this.options.timeouts.autoZoomAdjust
+    };
 
     // Datos del organigrama
     this.data = config.data;
