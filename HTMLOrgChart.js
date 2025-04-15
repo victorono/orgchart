@@ -119,7 +119,6 @@ class HTMLOrgChart {
     const orgHeight = orgRect.height;
 
     // Calcular la posición central exacta
-    // Dividimos entre 2 para posicionar el punto central del organigrama en el centro del contenedor
     const newTranslateX = Math.max(0, (containerWidth - (orgWidth * scale)) / 2);
     const newTranslateY = Math.max(0, (containerHeight - (orgHeight * scale)) / 2);
 
@@ -128,7 +127,10 @@ class HTMLOrgChart {
     this.translateY = 0;
 
     // Aplicar transformación con la posición central exacta y la escala
-    this.chartContainer.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${scale})`;
+    this.chartContainer.style.transform = `scale(${scale})`;
+
+    // Impedir que el usuario pueda arrastrar el organigrama fuera de los límites visibles
+    this.setupBoundaries();
 
     // Redibujar los conectores después del centrado
     setTimeout(() => this.redrawAllConnectors(), 50);
@@ -145,14 +147,17 @@ class HTMLOrgChart {
         // Solo nos interesa nuestro contenedor
         const entry = entries.find(e => e.target === this.container);
         if (entry) {
-          // Centrar el organigrama con la escala actual
-          this.forceCenterWithScale(this.scale);
+          // Manejar el cambio de tamaño
+          this.handleResize();
         }
       });
 
       // Comenzar a observar el contenedor
       this.resizeObserver.observe(this.container);
     }
+
+    // Escuchar también el evento de redimensionamiento de la ventana
+    window.addEventListener('resize', () => this.handleResize());
   }
 
   /**
@@ -290,9 +295,19 @@ class HTMLOrgChart {
     // Limpiar el contenedor
     this.container.innerHTML = '';
 
+    // Aplicar estilo para mantener el contenido dentro de los límites
+    this.container.style.overflow = 'hidden';
+    this.container.style.position = 'relative';
+
     // Crear contenedor principal del organigrama con capacidad de zoom y arrastre
     const chartContainer = document.createElement('div');
     chartContainer.className = 'org-chart-container';
+
+    // Asegurar que el contenedor del organigrama ocupe todo el espacio disponible
+    chartContainer.style.width = '100%';
+    chartContainer.style.height = '100%';
+    chartContainer.style.position = 'absolute';
+
     this.chartContainer = chartContainer;
 
     // Crear el árbol jerárquico usando UL/LI para mejor estructura
@@ -598,9 +613,9 @@ class HTMLOrgChart {
    * Crea los controles de navegación del organigrama
    */
   createControls() {
+    // Controles inferiores (zoom)
     const controlsContainer = document.createElement('div');
     controlsContainer.className = 'org-controls';
-    // Posicionar en la parte inferior derecha
     controlsContainer.style.position = 'absolute';
     controlsContainer.style.bottom = '10px';
     controlsContainer.style.right = '10px';
@@ -639,6 +654,120 @@ class HTMLOrgChart {
     // Añadir controles al contenedor principal
     controlsContainer.appendChild(zoomControls);
     this.container.appendChild(controlsContainer);
+
+    // Crear botón de pantalla completa (esquina superior izquierda)
+    this._createFullscreenButton();
+  }
+
+  /**
+   * Crea el botón de pantalla completa
+   * @private
+   */
+  _createFullscreenButton() {
+    // Crear contenedor para el botón de pantalla completa
+    const fullscreenContainer = document.createElement('div');
+    fullscreenContainer.className = 'org-fullscreen-control';
+    fullscreenContainer.style.position = 'absolute';
+    fullscreenContainer.style.top = '10px';
+    fullscreenContainer.style.right = '10px';
+    fullscreenContainer.style.zIndex = '100';
+
+    // Crear botón de pantalla completa
+    const fullscreenBtn = document.createElement('button');
+    fullscreenBtn.title = 'Pantalla completa';
+    fullscreenBtn.className = 'org-fullscreen-btn';
+    fullscreenBtn.innerHTML = '⛶'; // Símbolo de pantalla completa
+    fullscreenBtn.style.backgroundColor = '#fff';
+    fullscreenBtn.style.border = '1px solid #ccc';
+    fullscreenBtn.style.borderRadius = '3px';
+    fullscreenBtn.style.padding = '5px 8px';
+    fullscreenBtn.style.cursor = 'pointer';
+    fullscreenBtn.style.fontSize = '16px';
+
+    // Variable para rastrear el estado de pantalla completa
+    let isFullscreen = false;
+
+    // Guardar las dimensiones originales
+    const originalStyle = {
+      width: this.container.style.width,
+      height: this.container.style.height,
+      margin: this.container.style.margin,
+      position: this.container.style.position,
+      top: this.container.style.top,
+      left: this.container.style.left,
+      zIndex: this.container.style.zIndex
+    };
+
+    // Función para alternar el modo de pantalla completa
+    const toggleFullscreen = () => {
+      if (!isFullscreen) {
+        // Guardar posición actual de desplazamiento
+        this._scrollPosition = {
+          x: window.scrollX,
+          y: window.scrollY
+        };
+
+        // Cambiar a pantalla completa
+        Object.assign(this.container.style, {
+          position: 'fixed',
+          width: '100%',
+          height: '100%',
+          top: '0',
+          left: '0',
+          margin: '0',
+          zIndex: '9999'
+        });
+
+        // Prevenir desplazamiento
+        document.body.style.overflow = 'hidden';
+
+        // Cambiar icono del botón
+        fullscreenBtn.innerHTML = '⮌'; // Símbolo de salir de pantalla completa
+        fullscreenBtn.title = 'Salir de pantalla completa';
+
+        // Recentrar el organigrama en el nuevo contenedor
+        setTimeout(() => this.forceCenterWithScale(this.scale), 100);
+
+        isFullscreen = true;
+      } else {
+        // Restaurar dimensiones originales
+        Object.assign(this.container.style, originalStyle);
+
+        // Restaurar desplazamiento
+        document.body.style.overflow = '';
+
+        // Restaurar posición de desplazamiento
+        if (this._scrollPosition) {
+          window.scrollTo(this._scrollPosition.x, this._scrollPosition.y);
+        }
+
+        // Cambiar icono del botón
+        fullscreenBtn.innerHTML = '⛶';
+        fullscreenBtn.title = 'Pantalla completa';
+
+        // Recentrar el organigrama en el contenedor original
+        setTimeout(() => this.forceCenterWithScale(this.scale), 100);
+
+        isFullscreen = false;
+      }
+
+      // Manejar redimensionamiento
+      this.handleResize();
+    };
+
+    // Añadir evento de clic
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    // Añadir evento de teclado para salir con Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        toggleFullscreen();
+      }
+    });
+
+    // Añadir botón al contenedor
+    fullscreenContainer.appendChild(fullscreenBtn);
+    this.container.appendChild(fullscreenContainer);
   }
 
   /**
@@ -693,10 +822,25 @@ class HTMLOrgChart {
       const deltaX = e.clientX - lastX;
       const deltaY = e.clientY - lastY;
 
-      // Actualizar posición considerando la escala actual
-      // Esta es la corrección clave: dividir entre la escala para compensar
-      self.translateX += deltaX;
-      self.translateY += deltaY;
+      // Calcular nueva posición
+      let newTranslateX = self.translateX + deltaX;
+      let newTranslateY = self.translateY + deltaY;
+
+      // Aplicar restricción para mantener el organigrama visible
+      // Evitar arrastrar demasiado hacia la izquierda o derecha
+      if (self.boundaries) {
+        const minX = -self.boundaries.orgWidth + 100;  // Permitir que se oculte parcialmente, pero no totalmente
+        const maxX = self.boundaries.containerWidth - 100;  // Mantener al menos una parte visible
+        newTranslateX = Math.min(maxX, Math.max(minX, newTranslateX));
+
+        const minY = -self.boundaries.orgHeight + 100;  // Permitir que se oculte parcialmente, pero no totalmente
+        const maxY = self.boundaries.containerHeight - 100;  // Mantener al menos una parte visible
+        newTranslateY = Math.min(maxY, Math.max(minY, newTranslateY));
+      }
+
+      // Actualizar posición
+      self.translateX = newTranslateX;
+      self.translateY = newTranslateY;
 
       // Guardar la nueva posición como última conocida
       lastX = e.clientX;
@@ -1139,6 +1283,37 @@ _createHorizontalConnector(childrenList, children) {
   } catch (error) {
     console.error("Error creando conector horizontal:", error);
   }
+}
+
+/**
+ * Configura los límites para que el organigrama no pueda ser arrastrado fuera de la vista
+ */
+setupBoundaries() {
+  // Guardamos las dimensiones para validaciones durante el arrastre
+  if (!this.chartContainer || !this.container) return;
+
+  const containerRect = this.container.getBoundingClientRect();
+  const orgChart = this.chartContainer.querySelector('.organigrama');
+  if (!orgChart) return;
+
+  // Guardar dimensiones para uso posterior durante el arrastre
+  this.boundaries = {
+    containerWidth: containerRect.width,
+    containerHeight: containerRect.height,
+    orgWidth: orgChart.getBoundingClientRect().width * this.scale,
+    orgHeight: orgChart.getBoundingClientRect().height * this.scale
+  };
+}
+
+/**
+ * Maneja eventos de redimensionamiento de ventana
+ */
+handleResize() {
+  // Recalcular límites
+  this.setupBoundaries();
+
+  // Centrar con escala actual
+  this.forceCenterWithScale(this.scale);
 }
 }
 
