@@ -161,7 +161,7 @@ div#org-chart-container {
   font-size: 14px;
   color: #111827;
   margin: 10px 0 5px;
-  max-width: 150px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
