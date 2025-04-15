@@ -1,6 +1,6 @@
 /**
  * HTMLOrgChart.js - Biblioteca ligera para generar organigramas con HTML y CSS
- * Implementación con estructura UL/LI para mejor jerarquía y conexiones
+ * Implementación con estructura UL/LI para mejor jerarquía y conexiones basadas en CSS
  */
 class HTMLOrgChart {
   constructor(config) {
@@ -211,7 +211,7 @@ class HTMLOrgChart {
     this.createControls();
 
     // Ajustar las líneas de conexión después de renderizar
-    setTimeout(() => this.adjustConnectorLines(), 100);
+    setTimeout(() => this.redrawAllConnectors(), 100);
   }
 
   /**
@@ -432,12 +432,6 @@ class HTMLOrgChart {
         edgeIcon.classList.remove('oci-minus');
         edgeIcon.classList.add('oci-plus');
       }
-
-      // Eliminar la línea vertical del padre cuando se colapsa
-      const parentVertLine = hierarchyElement.querySelector('.parent-connector');
-      if (parentVertLine) {
-        parentVertLine.remove(); // Eliminar completamente el elemento
-      }
     } else { // Estaba colapsado, ahora expandir
       hierarchyElement.classList.add('isOpen');
       hierarchyElement.classList.remove('isChildrenCollapsed');
@@ -451,72 +445,14 @@ class HTMLOrgChart {
       }
     }
 
-    // Ya no llamamos a adjustPositions() que ajustaba el zoom
-    // Solo nos aseguramos de que los cambios sean visibles
+    // Esperar a que el DOM se actualice completamente
     setTimeout(() => {
-      // Esperar a que el DOM se actualice para cualquier ajuste visual necesario
-      this.ensureChartIsVisible();
+      // Redibujamos todos los conectores
+      this.redrawAllConnectors();
 
-      // Ajustar las líneas de conexión después de expandir/colapsar
-      this.adjustConnectorLines();
-    }, 300);
-  }
-
-  /**
-   * Ajusta las posiciones de los nodos después de expandir/colapsar
-   * @private - Ya no se usa directamente
-   */
-  adjustPositions() {
-    // Esta función ya no se llama directamente
-    setTimeout(() => {
-      // Solo verificamos que el gráfico siga siendo visible
+      // Asegurarnos que el organigrama siga visible
       this.ensureChartIsVisible();
     }, 300);
-  }
-
-  /**
-   * Expande todos los nodos
-   */
-  expandAll() {
-    // Expandir todos los nodos en el mapa de estado
-    const expandNodes = (nodes) => {
-      nodes.forEach(node => {
-        this.expandedNodes.set(node.id, true);
-        if (node.children && node.children.length) {
-          expandNodes(node.children);
-        }
-      });
-    };
-
-    expandNodes(this.hierarchicalData);
-
-    // Re-renderizar todo el organigrama
-    this.render();
-
-    // Ajustar las líneas después de un tiempo para que el DOM se actualice
-    setTimeout(() => this.adjustConnectorLines(), 300);
-  }
-
-  /**
-   * Colapsa todos los nodos excepto los niveles iniciales configurados
-   */
-  collapseAll() {
-    const collapseNodes = (nodes, level) => {
-      nodes.forEach(node => {
-        this.expandedNodes.set(node.id, level < this.options.initialVisibleLevels);
-        if (node.children && node.children.length) {
-          collapseNodes(node.children, level + 1);
-        }
-      });
-    };
-
-    collapseNodes(this.hierarchicalData, 0);
-
-    // Re-renderizar todo el organigrama
-    this.render();
-
-    // Ajustar las líneas después de un tiempo para que el DOM se actualice
-    setTimeout(() => this.adjustConnectorLines(), 300);
   }
 
   /**
@@ -556,41 +492,14 @@ class HTMLOrgChart {
     resetBtn.className = 'org-reset';
     resetBtn.addEventListener('click', () => this.resetView());
 
-    // Botón expandir todo
-    const expandAllBtn = document.createElement('button');
-    expandAllBtn.innerHTML = '⊞';
-    expandAllBtn.title = 'Expandir todo';
-    expandAllBtn.className = 'org-expand-all';
-    expandAllBtn.addEventListener('click', () => this.expandAll());
-
-    // Botón colapsar todo
-    const collapseAllBtn = document.createElement('button');
-    collapseAllBtn.innerHTML = '⊟';
-    collapseAllBtn.title = 'Colapsar todo';
-    collapseAllBtn.className = 'org-collapse-all';
-    collapseAllBtn.addEventListener('click', () => this.collapseAll());
-
     // Añadir botones al contenedor
     zoomControls.appendChild(zoomOutBtn);
     zoomControls.appendChild(resetBtn);
     zoomControls.appendChild(zoomInBtn);
-    zoomControls.appendChild(expandAllBtn);
-    zoomControls.appendChild(collapseAllBtn);
 
     // Añadir controles al contenedor principal
     controlsContainer.appendChild(zoomControls);
     this.container.appendChild(controlsContainer);
-  }
-
-  /**
-   * Crea controles de ordenamiento
-   * @returns {HTMLElement} - Contenedor con controles de ordenamiento
-   * @private - Ya no se utiliza externamente
-   */
-  _createSortControls() {
-    // Mantener el código original por si se necesita en el futuro,
-    // pero cambiar el nombre a privado (_) ya que no lo usamos
-    // ...existing code...
   }
 
   /**
@@ -763,6 +672,13 @@ class HTMLOrgChart {
 
       // Aplicar transformación
       applyTransform();
+
+      // Recalcular las líneas de conexión después de aplicar zoom
+      // Usar debounce para mejorar rendimiento
+      clearTimeout(self.wheelZoomTimeout);
+      self.wheelZoomTimeout = setTimeout(() => {
+        self.redrawAllConnectors();
+      }, 100);
     };
 
     // Registrar evento de rueda
@@ -859,6 +775,9 @@ class HTMLOrgChart {
     // Aplicar transformación
     this.chartContainer.style.transform =
       `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+
+    // Recalcular las líneas de conexión
+    setTimeout(() => this.redrawAllConnectors(), 100); // Usar redrawAllConnectors
   }
 
   /**
@@ -875,6 +794,9 @@ class HTMLOrgChart {
 
     // Centrar el organigrama
     this.centerChart();
+
+    // Recalcular las líneas de conexión
+    setTimeout(() => this.redrawAllConnectors(), 100); // Usar redrawAllConnectors
   }
 
   /**
@@ -955,126 +877,161 @@ class HTMLOrgChart {
   }
 
   /**
-   * Ajusta las líneas de conexión para que se extiendan exactamente entre los nodos
+   * Redibuja todos los conectores del organigrama
    */
-  adjustConnectorLines() {
-    // Seleccionar todos los nodos que tengan hijos
-    const multiChildParents = Array.from(document.querySelectorAll('.organigrama .hierarchy.isOpen'));
+  redrawAllConnectors() {
 
-    multiChildParents.forEach(parentItem => {
-      const childrenList = parentItem.querySelector('ul.nodes');
-      if (!childrenList) return;
+    try {
+      // 1. Eliminar todos los conectores existentes para empezar limpio
+      document.querySelectorAll('.connector-line, .vert-connector, .parent-connector').forEach(conn => {
+        conn.remove();
+      });
 
-      const children = Array.from(childrenList.querySelectorAll(':scope > li'));
-      if (children.length < 2) return;
+      // 2. Procesar todos los nodos con hijos expuestos
+      const allExpandedParents = Array.from(document.querySelectorAll('.organigrama .hierarchy.isOpen'));
 
+      allExpandedParents.forEach(parentNode => {
+        // Crear conector vertical para el padre
+        this._createParentConnector(parentNode);
+
+        // Obtener lista de hijos
+        const childrenList = parentNode.querySelector('ul.nodes');
+        if (!childrenList || childrenList.classList.contains('hidden')) return;
+
+        const children = Array.from(childrenList.querySelectorAll(':scope > li'));
+
+        // Crear conectores verticales para cada hijo
+        children.forEach(childNode => {
+          this._createChildConnector(childNode);
+        });
+
+        // Si hay múltiples hijos, crear conector horizontal
+        if (children.length >= 2) {
+          this._createHorizontalConnector(childrenList, children);
+        }
+      });
+
+      // 3. Crear conectores verticales para todos los nodos hijos, aunque sus padres no estén expandidos
+      const allChildNodes = Array.from(document.querySelectorAll('.organigrama ul.nodes > li'));
+      allChildNodes.forEach(node => {
+        if (!node.querySelector('.vert-connector')) {
+          this._createChildConnector(node);
+        }
+      });
+
+    } catch (error) {
+      console.error("Error en redrawAllConnectors:", error);
+    }
+  }
+
+  /**
+   * Crea un conector vertical para un nodo padre
+   * @param {HTMLElement} parentNode - Nodo padre expandido
+   * @private
+   */
+  _createParentConnector(parentNode) {
+    try {
+      if (!parentNode || !parentNode.classList.contains('isOpen')) return;
+
+      const nodeDiv = parentNode.querySelector('.node');
+      if (!nodeDiv) return;
+
+      const parentConnector = document.createElement('div');
+      parentConnector.className = 'parent-connector';
+
+      // Aplicar estilos específicos
+      Object.assign(parentConnector.style, {
+        position: 'absolute',
+        width: '2px',
+        backgroundColor: this.options.lineColor,
+        height: '10px',
+        top: `${nodeDiv.offsetHeight}px`,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: '1'
+      });
+
+      parentNode.appendChild(parentConnector);
+    } catch (error) {
+      console.error("Error creando conector del padre:", error);
+    }
+  }
+
+  /**
+   * Crea un conector vertical para un nodo hijo
+   * @param {HTMLElement} childNode - Nodo hijo
+   * @private
+   */
+  _createChildConnector(childNode) {
+    try {
+      const nodeDiv = childNode.querySelector('.node');
+      if (!nodeDiv) return;
+
+      const childConnector = document.createElement('div');
+      childConnector.className = 'vert-connector';
+
+      // Aplicar estilos específicos
+      Object.assign(childConnector.style, {
+        position: 'absolute',
+        width: '2px',
+        backgroundColor: this.options.lineColor,
+        height: '20px',
+        top: '-20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: '1'
+      });
+
+      childNode.prepend(childConnector);
+    } catch (error) {
+      console.error("Error creando conector del hijo:", error);
+    }
+  }
+
+  /**
+   * Crea un conector horizontal entre nodos hermanos
+   * @param {HTMLElement} childrenList - Lista contenedor de los hijos
+   * @param {Array} children - Array de nodos hijo
+   * @private
+   */
+  _createHorizontalConnector(childrenList, children) {
+    try {
       const firstChild = children[0];
       const lastChild = children[children.length - 1];
 
-      // Dar un poco más de tiempo a los nuevos nodos para renderizarse completamente
-      setTimeout(() => {
-        // Usar getBoundingClientRect para posiciones absolutas correctas
-        const firstNodeDiv = firstChild.querySelector('.node');
-        const lastNodeDiv = lastChild.querySelector('.node');
+      // Calcular la posición de los extremos
+      const firstChildRect = firstChild.getBoundingClientRect();
+      const lastChildRect = lastChild.getBoundingClientRect();
+      const listRect = childrenList.getBoundingClientRect();
 
-        if (!firstNodeDiv || !lastNodeDiv) return;
+      // Calcular posiciones relativas
+      const firstCenter = (firstChildRect.left - listRect.left) + (firstChildRect.width / 2);
+      const lastCenter = (lastChildRect.left - listRect.left) + (lastChildRect.width / 2);
 
-        // Obtener rectángulos para mediciones precisas
-        const firstRect = firstNodeDiv.getBoundingClientRect();
-        const lastRect = lastNodeDiv.getBoundingClientRect();
+      // Crear el conector horizontal
+      const connector = document.createElement('div');
+      connector.className = 'connector-line';
 
-        // Calcular centros para medición precisa
-        const firstCenterX = firstRect.left + firstRect.width / 2;
-        const lastCenterX = lastRect.left + lastRect.width / 2;
+      // Aplicar estilos específicos
+      const startPos = Math.min(firstCenter, lastCenter);
+      const endPos = Math.max(firstCenter, lastCenter);
+      const width = endPos - startPos;
 
-        // La distancia es desde el centro del primer al centro del último nodo
-        const distance = lastCenterX - firstCenterX;
+      // Añadir el conector al DOM
+      Object.assign(connector.style, {
+        position: 'absolute',
+        height: '2px',
+        backgroundColor: this.options.lineColor,
+        width: `${width}px`,
+        top: '-20px',
+        left: `${startPos}px`,
+        zIndex: '1'
+      });
 
-        // Punto de inicio es relativo al contenedor padre
-        const parentRect = childrenList.getBoundingClientRect();
-        const startPos = firstCenterX - parentRect.left;
-
-        // Crear un elemento DIV real para la línea
-        let connector = childrenList.querySelector('.connector-line');
-        if (!connector) {
-          connector = document.createElement('div');
-          connector.className = 'connector-line';
-          childrenList.prepend(connector);
-        }
-
-        // Estilo directo en el elemento con mejor posicionamiento
-        Object.assign(connector.style, {
-          position: 'absolute',
-          height: '2px',
-          backgroundColor: '#4ade80',
-          width: `${Math.max(20, distance)}px`, // Asegurar un ancho mínimo
-          top: '-20px',
-          left: `${startPos}px`, // Posición basada en el centro del primer nodo
-          zIndex: '1'
-        });
-
-        // También crear líneas verticales cortas para cada nodo hijo
-        children.forEach(child => {
-          const nodeDiv = child.querySelector('.node');
-          let vertLine = child.querySelector('.vert-connector');
-          if (!vertLine) {
-            vertLine = document.createElement('div');
-            vertLine.className = 'vert-connector';
-            child.prepend(vertLine);
-          }
-
-          Object.assign(vertLine.style, {
-            position: 'absolute',
-            width: '2px',
-            backgroundColor: '#4ade80',
-            height: '20px',
-            top: '-20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: '1'
-          });
-        });
-
-        // También asegurar la línea vertical del nodo padre
-        if (parentItem.classList.contains('isOpen')) {
-          // Eliminar cualquier conector vertical existente para evitar duplicados
-          const existingParentVertLine = parentItem.querySelector(':scope > .parent-connector');
-          if (existingParentVertLine) {
-            existingParentVertLine.remove();
-          }
-
-          // Crear nuevo conector vertical solo si el nodo está expandido
-          const parentVertLine = document.createElement('div');
-          parentVertLine.className = 'parent-connector';
-          parentItem.appendChild(parentVertLine);
-
-          const nodeDiv = parentItem.querySelector('.node');
-          Object.assign(parentVertLine.style, {
-            position: 'absolute',
-            width: '2px',
-            backgroundColor: '#4ade80',
-            height: '10px',
-            top: `${nodeDiv.offsetHeight}px`,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: '1'
-          });
-        }
-
-        // Remover estilos previos que pueden estar interfiriendo
-        const oldStyles = document.querySelectorAll(`style[data-for="${parentItem.querySelector('.node').id}"]`);
-        oldStyles.forEach(style => style.remove());
-      }, 50); // Pequeño retraso para asegurar mediciones correctas
-    });
-
-    // Asegurar que no queden líneas verticales en nodos colapsados
-    const collapsedNodes = Array.from(document.querySelectorAll('.organigrama .hierarchy:not(.isOpen)'));
-    collapsedNodes.forEach(node => {
-      const parentVertLine = node.querySelector('.parent-connector');
-      if (parentVertLine) {
-        parentVertLine.remove();
-      }
-    });
+      childrenList.prepend(connector);
+    } catch (error) {
+      console.error("Error creando conector horizontal:", error);
+    }
   }
 }
 
