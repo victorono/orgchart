@@ -66,6 +66,118 @@ class HTMLOrgChart {
 
     // Configurar controles de zoom y arrastre
     this.setupZoomControls();
+
+    // Configurar observador de redimensionamiento si está disponible
+    this.setupResizeObserver();
+
+    // Asegurar que el organigrama esté centrado inicialmente
+    // con un retraso apropiado para permitir que el DOM se renderice completamente
+    setTimeout(() => {
+      this.forceCenterWithScale(this.options.initialZoom);
+
+      // Verificación adicional después de un tiempo mayor
+      setTimeout(() => {
+        this.forceCenterWithScale(this.options.initialZoom);
+      }, 500);
+    }, 300);
+  }
+
+  /**
+   * Fuerza el centrado del organigrama con una escala específica
+   * @param {number} scale - La escala a aplicar
+   */
+  forceCenterWithScale(scale) {
+    if (!this.chartContainer || !this.container) return;
+
+    // Asegurar que la escala sea válida
+    if (isNaN(scale) || scale <= 0) {
+      scale = 1; // Valor por defecto si la escala es inválida
+    }
+
+    // Establecer la escala actual
+    this.scale = scale;
+
+    // Obtener dimensiones del contenedor
+    const containerRect = this.container.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    const containerHeight = containerRect.height;
+
+    // Para obtener medidas precisas, quitar temporalmente cualquier transformación
+    const originalTransform = this.chartContainer.style.transform;
+    this.chartContainer.style.transform = '';
+
+    // Obtener el organigrama y sus dimensiones reales
+    const orgChart = this.chartContainer.querySelector('.organigrama');
+    if (!orgChart) {
+      this.chartContainer.style.transform = originalTransform;
+      return;
+    }
+
+    // Usar getBoundingClientRect para dimensiones exactas
+    const orgRect = orgChart.getBoundingClientRect();
+    const orgWidth = orgRect.width;
+    const orgHeight = orgRect.height;
+
+    console.log(`Dimensiones: Contenedor=${containerWidth}x${containerHeight}, Organigrama=${orgWidth}x${orgHeight}`);
+
+    // Calcular la posición central exacta
+    // Dividimos entre 2 para posicionar el punto central del organigrama en el centro del contenedor
+    const newTranslateX = Math.max(0, (containerWidth - (orgWidth * scale)) / 2);
+    const newTranslateY = Math.max(0, (containerHeight - (orgHeight * scale)) / 2);
+
+    // Actualizar la posición
+    this.translateX = newTranslateX;
+    this.translateY = newTranslateY;
+
+    console.log(`Centro calculado: X=${newTranslateX}, Y=${newTranslateY} con escala=${scale}`);
+
+    // Aplicar transformación con la posición central exacta
+    this.chartContainer.style.transform = `scale(${scale})`;
+
+    // Redibujar los conectores después del centrado
+    setTimeout(() => this.redrawAllConnectors(), 50);
+  }
+
+  /**
+   * Detectar cuando el contenedor cambia de tamaño para recentrar
+   * Este método se llama automáticamente si hay un ResizeObserver disponible
+   */
+  setupResizeObserver() {
+    if (typeof ResizeObserver !== 'undefined') {
+      // Crear un observador de redimensionamiento para el contenedor
+      this.resizeObserver = new ResizeObserver(entries => {
+        // Solo nos interesa nuestro contenedor
+        const entry = entries.find(e => e.target === this.container);
+        if (entry) {
+          console.log("Contenedor redimensionado, recentrando...");
+          // Centrar el organigrama con la escala actual
+          this.forceCenterWithScale(this.scale);
+        }
+      });
+
+      // Comenzar a observar el contenedor
+      this.resizeObserver.observe(this.container);
+    }
+  }
+
+  /**
+   * Centra el organigrama con un nivel de zoom específico
+   * @param {number} zoomLevel - Nivel de zoom a aplicar
+   */
+  centerChartWithZoom(zoomLevel) {
+    if (!this.chartContainer || !this.container) return;
+
+    // Verificar valores inválidos
+    if (isNaN(zoomLevel) || zoomLevel <= 0) {
+      console.warn("Zoom inválido en centerChartWithZoom:", zoomLevel);
+      zoomLevel = this.options.initialZoom;
+    }
+
+    // Actualizar escala
+    this.scale = zoomLevel;
+
+    // Asegurar que los conectores se mantengan visibles
+    this.redrawAllConnectors();
   }
 
   /**
@@ -518,8 +630,7 @@ class HTMLOrgChart {
       this.chartContainer.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
     };
 
-    // Inicializar la transformación
-    applyTransform();
+    // Ya no inicializamos la transformación aquí, lo hacemos en forceCenterWithScale
 
     // ===== MANEJO DE EVENTOS DE MOUSE =====
 
@@ -687,42 +798,15 @@ class HTMLOrgChart {
     // Añadir tabIndex para que el contenedor pueda recibir foco
     this.chartContainer.tabIndex = 0;
 
-    // Centrar el organigrama inicialmente después de un breve retraso
-    // para asegurar que todos los elementos se han renderizado
-    setTimeout(() => this.centerChart(), 100);
+    // Ya no usamos el setTimeout aquí, porque ahora llamamos a centerChartWithZoom
+    // desde initialize() con un retraso más largo para asegurar que todo esté listo
   }
 
   /**
    * Centra el organigrama en el contenedor
    */
   centerChart() {
-    if (!this.chartContainer || !this.container) return;
-    // Usar setTimeout para permitir que el DOM se actualice
-    setTimeout(() => {
-      // Obtener dimensiones
-      const containerRect = this.container.getBoundingClientRect();
-      const organigramaElem = this.chartContainer.querySelector('.organigrama');
-
-      if (!organigramaElem) return;
-
-      const organigramaRect = organigramaElem.getBoundingClientRect();
-
-      // Calcular el centro
-      let newTranslateX = (containerRect.width - organigramaRect.width * this.scale) / 2;
-      // Establecer un margen mínimo
-      if (newTranslateX < 20) newTranslateX = 20;
-
-      // Siempre mantener un margen superior
-      const newTranslateY = 20;
-
-      // Actualizar posición
-      this.translateX = newTranslateX;
-      this.translateY = newTranslateY;
-
-      // Aplicar transformación
-      this.chartContainer.style.transform =
-        `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
-    }, 50);
+    this.forceCenterWithScale(this.scale);
   }
 
   /**
@@ -742,7 +826,7 @@ class HTMLOrgChart {
     // Si está completamente fuera de la vista, centrarlo
     if (actualRect.right < 0 || actualRect.left > containerRect.width ||
         actualRect.bottom < 0 || actualRect.top > containerRect.height) {
-      this.centerChart();
+      this.forceCenterWithScale(this.scale);
     }
   }
 
@@ -784,19 +868,10 @@ class HTMLOrgChart {
    * Restablece la vista al estado inicial
    */
   resetView() {
-    this.scale = this.options.initialZoom;
-    this.translateX = 0;
-    this.translateY = 0;
+    // Forzar el centrado con la escala inicial
+    this.forceCenterWithScale(this.options.initialZoom);
 
-    // Aplicar transformación inicial
-    this.chartContainer.style.transform =
-      `translate(0, 0) scale(${this.options.initialZoom})`;
-
-    // Centrar el organigrama
-    this.centerChart();
-
-    // Recalcular las líneas de conexión
-    setTimeout(() => this.redrawAllConnectors(), 100); // Usar redrawAllConnectors
+    // No es necesario redibujado adicional aquí ya que forceCenterWithScale ya lo hace
   }
 
   /**
