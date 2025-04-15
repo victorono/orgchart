@@ -403,6 +403,38 @@ class HTMLOrgChart {
       image.setAttribute('x', '0');
       image.setAttribute('y', '0');
 
+      // Manejar error 404 para imágenes no encontradas
+      image.addEventListener('error', () => {
+        console.warn(`Imagen no encontrada para ${node.name} (ID: ${node.id}): ${node.img}`);
+        // Eliminar la imagen con error
+        pattern.removeChild(image);
+
+        // Reemplazar con un placeholder de texto
+        const fallbackGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        // Fondo circular en color de relleno
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', '40');
+        circle.setAttribute('cy', '40');
+        circle.setAttribute('r', '40');
+        circle.setAttribute('fill', this.options.nodeColor || '#4ade80');
+
+        // Texto con iniciales
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', '40');
+        text.setAttribute('y', '48');  // Ajustado para centrar verticalmente
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', 'white');
+        text.setAttribute('font-size', '28');
+        text.setAttribute('font-weight', 'bold');
+        text.textContent = node.name.substring(0, 2).toUpperCase();
+
+        fallbackGroup.appendChild(circle);
+        fallbackGroup.appendChild(text);
+        pattern.appendChild(fallbackGroup);
+      });
+
       pattern.appendChild(image);
 
       // Crear rectángulo con el patrón
