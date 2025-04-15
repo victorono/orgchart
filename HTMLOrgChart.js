@@ -36,6 +36,7 @@ class HTMLOrgChart {
       sortFunction: null,
       showSortControls: false,
       initialZoom: 0.8,
+      minHeight: '300px', // Altura mínima predeterminada
     };
 
     // Combinar opciones predeterminadas con las proporcionadas
@@ -298,6 +299,13 @@ class HTMLOrgChart {
     // Aplicar estilo para mantener el contenido dentro de los límites
     this.container.style.overflow = 'hidden';
     this.container.style.position = 'relative';
+
+    // Aplicar altura mínima si está establecida
+    if (this.options.minHeight) {
+      this.container.style.minHeight = typeof this.options.minHeight === 'number'
+        ? `${this.options.minHeight}px`
+        : this.options.minHeight;
+    }
 
     // Crear contenedor principal del organigrama con capacidad de zoom y arrastre
     const chartContainer = document.createElement('div');
@@ -1194,7 +1202,7 @@ _createParentConnector(parentNode) {
     });
 
     parentNode.appendChild(parentConnector);
-  } catch (error) {
+} catch (error) {
     console.error("Error creando conector del padre:", error);
   }
 }
@@ -1202,7 +1210,15 @@ _createParentConnector(parentNode) {
 /**
  * Crea un conector vertical para un nodo hijo
  * @param {HTMLElement} childNode - Nodo hijo
- * @private
+ * @priv} catch (error) {
+    console.error("Error creando conector del padre:", error);
+  }
+}
+
+/**
+ * Crea un conector vertical para un nodo hijo
+ * @param {HTMLElement} childNode - Nodo hijo
+ate
  */
 _createChildConnector(childNode) {
   try {
