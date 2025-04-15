@@ -35,7 +35,7 @@ class HTMLOrgChart {
       sortDirection: 'asc',
       sortFunction: null,
       showSortControls: false,
-      initialZoom: 1
+      initialZoom: 0.8,
     };
 
     // Combinar opciones predeterminadas con las proporcionadas
@@ -875,164 +875,172 @@ class HTMLOrgChart {
     // Ajustar zoom automáticamente para mostrar todo el contenido
     setTimeout(() => this.autoAdjustZoom(), 100);
   }
+/**
+ * Redibuja todos los conectores del organigrama teniendo en cuenta la escala
+ */
+redrawAllConnectors() {
+  try {
+    // 1. Eliminar todos los conectores existentes para empezar limpio
+    document.querySelectorAll('.connector-line, .vert-connector, .parent-connector').forEach(conn => {
+      conn.remove();
+    });
 
-  /**
-   * Redibuja todos los conectores del organigrama
-   */
-  redrawAllConnectors() {
+    // 2. Procesar todos los nodos con hijos expuestos
+    const allExpandedParents = Array.from(document.querySelectorAll('.organigrama .hierarchy.isOpen'));
 
-    try {
-      // 1. Eliminar todos los conectores existentes para empezar limpio
-      document.querySelectorAll('.connector-line, .vert-connector, .parent-connector').forEach(conn => {
-        conn.remove();
+    allExpandedParents.forEach(parentNode => {
+      // Crear conector vertical para el padre
+      this._createParentConnector(parentNode);
+
+      // Obtener lista de hijos
+      const childrenList = parentNode.querySelector('ul.nodes');
+      if (!childrenList || childrenList.classList.contains('hidden')) return;
+
+      const children = Array.from(childrenList.querySelectorAll(':scope > li'));
+
+      // Crear conectores verticales para cada hijo
+      children.forEach(childNode => {
+        this._createChildConnector(childNode);
       });
 
-      // 2. Procesar todos los nodos con hijos expuestos
-      const allExpandedParents = Array.from(document.querySelectorAll('.organigrama .hierarchy.isOpen'));
+      // Si hay múltiples hijos, crear conector horizontal
+      if (children.length >= 2) {
+        this._createHorizontalConnector(childrenList, children);
+      }
+    });
 
-      allExpandedParents.forEach(parentNode => {
-        // Crear conector vertical para el padre
-        this._createParentConnector(parentNode);
+    // 3. Crear conectores verticales para todos los nodos hijos, aunque sus padres no estén expandidos
+    const allChildNodes = Array.from(document.querySelectorAll('.organigrama ul.nodes > li'));
+    allChildNodes.forEach(node => {
+      if (!node.querySelector('.vert-connector')) {
+        this._createChildConnector(node);
+      }
+    });
 
-        // Obtener lista de hijos
-        const childrenList = parentNode.querySelector('ul.nodes');
-        if (!childrenList || childrenList.classList.contains('hidden')) return;
-
-        const children = Array.from(childrenList.querySelectorAll(':scope > li'));
-
-        // Crear conectores verticales para cada hijo
-        children.forEach(childNode => {
-          this._createChildConnector(childNode);
-        });
-
-        // Si hay múltiples hijos, crear conector horizontal
-        if (children.length >= 2) {
-          this._createHorizontalConnector(childrenList, children);
-        }
-      });
-
-      // 3. Crear conectores verticales para todos los nodos hijos, aunque sus padres no estén expandidos
-      const allChildNodes = Array.from(document.querySelectorAll('.organigrama ul.nodes > li'));
-      allChildNodes.forEach(node => {
-        if (!node.querySelector('.vert-connector')) {
-          this._createChildConnector(node);
-        }
-      });
-
-    } catch (error) {
-      console.error("Error en redrawAllConnectors:", error);
-    }
+  } catch (error) {
+    console.error("Error en redrawAllConnectors:", error);
   }
+}
 
-  /**
-   * Crea un conector vertical para un nodo padre
-   * @param {HTMLElement} parentNode - Nodo padre expandido
-   * @private
-   */
-  _createParentConnector(parentNode) {
-    try {
-      if (!parentNode || !parentNode.classList.contains('isOpen')) return;
+/**
+ * Crea un conector vertical para un nodo padre
+ * @param {HTMLElement} parentNode - Nodo padre expandido
+ * @private
+ */
+_createParentConnector(parentNode) {
+  try {
+    if (!parentNode || !parentNode.classList.contains('isOpen')) return;
 
-      const nodeDiv = parentNode.querySelector('.node');
-      if (!nodeDiv) return;
+    const nodeDiv = parentNode.querySelector('.node');
+    if (!nodeDiv) return;
 
-      const parentConnector = document.createElement('div');
-      parentConnector.className = 'parent-connector';
+    const parentConnector = document.createElement('div');
+    parentConnector.className = 'parent-connector';
 
-      // Aplicar estilos específicos
-      Object.assign(parentConnector.style, {
-        position: 'absolute',
-        width: '2px',
-        backgroundColor: this.options.lineColor,
-        height: '10px',
-        top: `${nodeDiv.offsetHeight}px`,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: '1'
-      });
+    // Aplicar estilos específicos usando CSS para mayor consistencia
+    Object.assign(parentConnector.style, {
+      position: 'absolute',
+      width: '2px',
+      backgroundColor: this.options.lineColor,
+      height: '10px',
+      top: `${nodeDiv.offsetHeight}px`,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '1'
+    });
 
-      parentNode.appendChild(parentConnector);
-    } catch (error) {
-      console.error("Error creando conector del padre:", error);
-    }
+    parentNode.appendChild(parentConnector);
+  } catch (error) {
+    console.error("Error creando conector del padre:", error);
   }
+}
 
-  /**
-   * Crea un conector vertical para un nodo hijo
-   * @param {HTMLElement} childNode - Nodo hijo
-   * @private
-   */
-  _createChildConnector(childNode) {
-    try {
-      const nodeDiv = childNode.querySelector('.node');
-      if (!nodeDiv) return;
+/**
+ * Crea un conector vertical para un nodo hijo
+ * @param {HTMLElement} childNode - Nodo hijo
+ * @private
+ */
+_createChildConnector(childNode) {
+  try {
+    const nodeDiv = childNode.querySelector('.node');
+    if (!nodeDiv) return;
 
-      const childConnector = document.createElement('div');
-      childConnector.className = 'vert-connector';
+    const childConnector = document.createElement('div');
+    childConnector.className = 'vert-connector';
 
-      // Aplicar estilos específicos
-      Object.assign(childConnector.style, {
-        position: 'absolute',
-        width: '2px',
-        backgroundColor: this.options.lineColor,
-        height: '20px',
-        top: '-20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: '1'
-      });
+    // Aplicar estilos con CSS en lugar de cálculos en JS
+    Object.assign(childConnector.style, {
+      position: 'absolute',
+      width: '2px',
+      backgroundColor: this.options.lineColor,
+      height: '20px',
+      top: '-20px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '1'
+    });
 
-      childNode.prepend(childConnector);
-    } catch (error) {
-      console.error("Error creando conector del hijo:", error);
-    }
+    childNode.prepend(childConnector);
+  } catch (error) {
+    console.error("Error creando conector del hijo:", error);
   }
+}
 
-  /**
-   * Crea un conector horizontal entre nodos hermanos
-   * @param {HTMLElement} childrenList - Lista contenedor de los hijos
-   * @param {Array} children - Array de nodos hijo
-   * @private
-   */
-  _createHorizontalConnector(childrenList, children) {
-    try {
-      const firstChild = children[0];
-      const lastChild = children[children.length - 1];
+/**
+ * Crea un conector horizontal entre nodos hermanos
+ * @param {HTMLElement} childrenList - Lista contenedor de los hijos
+ * @param {Array} children - Array de nodos hijo
+ * @private
+ */
+_createHorizontalConnector(childrenList, children) {
+  try {
+    if (children.length < 2) return;
 
-      // Calcular la posición de los extremos
-      const firstChildRect = firstChild.getBoundingClientRect();
-      const lastChildRect = lastChild.getBoundingClientRect();
-      const listRect = childrenList.getBoundingClientRect();
+    // En lugar de usar getBoundingClientRect(), usamos offsetLeft y offsetWidth
+    // que no se ven afectados por la escala
+    const firstChild = children[0];
+    const lastChild = children[children.length - 1];
 
-      // Calcular posiciones relativas
-      const firstCenter = (firstChildRect.left - listRect.left) + (firstChildRect.width / 2);
-      const lastCenter = (lastChildRect.left - listRect.left) + (lastChildRect.width / 2);
+    // Obtener los nodos para calcular posiciones
+    const firstNodeDiv = firstChild.querySelector('.node');
+    const lastNodeDiv = lastChild.querySelector('.node');
 
-      // Crear el conector horizontal
-      const connector = document.createElement('div');
-      connector.className = 'connector-line';
+    if (!firstNodeDiv || !lastNodeDiv) return;
 
-      // Aplicar estilos específicos
-      const startPos = Math.min(firstCenter, lastCenter);
-      const endPos = Math.max(firstCenter, lastCenter);
-      const width = endPos - startPos;
+    // Calcular centros en el espacio sin escala
+    const firstChildLeft = firstChild.offsetLeft;
+    const lastChildLeft = lastChild.offsetLeft;
+    const firstChildWidth = firstChild.offsetWidth;
+    const lastChildWidth = lastChild.offsetWidth;
 
-      // Añadir el conector al DOM
-      Object.assign(connector.style, {
-        position: 'absolute',
-        height: '2px',
-        backgroundColor: this.options.lineColor,
-        width: `${width}px`,
-        top: '-20px',
-        left: `${startPos}px`,
-        zIndex: '1'
-      });
+    const firstCenter = firstChildLeft + (firstChildWidth / 2);
+    const lastCenter = lastChildLeft + (lastChildWidth / 2);
 
-      childrenList.prepend(connector);
-    } catch (error) {
-      console.error("Error creando conector horizontal:", error);
-    }
+    // Crear el conector horizontal
+    const connector = document.createElement('div');
+    connector.className = 'connector-line';
+
+    // Calcular posición y ancho
+    const startPos = Math.min(firstCenter, lastCenter);
+    const endPos = Math.max(firstCenter, lastCenter);
+    const width = endPos - startPos;
+
+    // Aplicar estilos con posiciones absolutas
+    Object.assign(connector.style, {
+      position: 'absolute',
+      height: '2px',
+      backgroundColor: this.options.lineColor,
+      width: `${width}px`,
+      top: '-20px',
+      left: `${startPos}px`,
+      zIndex: '1'
+    });
+
+    childrenList.prepend(connector);
+  } catch (error) {
+    console.error("Error creando conector horizontal:", error);
   }
+}
 }
 
 // Exportar la clase
