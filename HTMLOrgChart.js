@@ -169,7 +169,7 @@ class HTMLOrgChart {
 
     // Verificar valores inválidos
     if (isNaN(zoomLevel) || zoomLevel <= 0) {
-      console.warn("Zoom inválido en centerChartWithZoom:", zoomLevel);
+      // console.warn("Zoom inválido en centerChartWithZoom:", zoomLevel);
       zoomLevel = this.options.initialZoom;
     }
 
@@ -420,7 +420,7 @@ class HTMLOrgChart {
 
       // Manejar error 404 para imágenes no encontradas
       image.addEventListener('error', () => {
-        console.warn(`Imagen no encontrada para ${node.name} (ID: ${node.id}): ${node.img}`);
+        // console.warn(`Imagen no encontrada para ${node.name} (ID: ${node.id}): ${node.img}`);
         // Eliminar la imagen con error
         pattern.removeChild(image);
 
