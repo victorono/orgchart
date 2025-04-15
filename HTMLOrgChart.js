@@ -31,6 +31,7 @@ class HTMLOrgChart {
       subtitleColor: "#6b7280",
       initiallyExpanded: false,
       initialVisibleLevels: 1,
+      autoCenterLevels: 2, // New option: automatically center when number of visible levels matches this
       sortBy: 'name',
       sortDirection: 'asc',
       sortFunction: null,
@@ -700,6 +701,13 @@ class HTMLOrgChart {
           }
         }
       }
+
+      // Check if we should auto-center based on visible levels
+      // This is now called after the DOM update is complete
+      if (this.options.autoCenterLevels !== null &&
+          this.options.autoCenterLevels > 0) {
+        this.centerChartByVisibleLevels(this.options.autoCenterLevels);
+      }
     }, this.TIMEOUTS.NODE_TOGGLE_UPDATE);
   }
 
@@ -1272,7 +1280,6 @@ redrawAllConnectors() {
 
     // 2. Process all nodes with exposed children
     const allExpandedParents = Array.from(document.querySelectorAll('.organigrama .hierarchy.isOpen'));
-
     allExpandedParents.forEach(parentNode => {
       // Create vertical connector for the parent
       this._createParentConnector(parentNode);
@@ -1295,8 +1302,6 @@ redrawAllConnectors() {
     });
 
     // 3. Create vertical connectors for other child nodes that need connectors
-    // But now with the improved check in _createChildConnector, they will only be created
-    // where needed
     const allChildNodes = Array.from(document.querySelectorAll('.organigrama ul.nodes > li'));
     allChildNodes.forEach(node => {
       if (!node.querySelector('.vert-connector')) {
@@ -1545,6 +1550,82 @@ handleResize() {
 
   // Center with current scale
   this.forceCenterWithScale(this.scale);
+}
+
+/**
+ * Centers the chart if the number of visible levels matches the configured value
+ * @param {number} levelCount - Number of visible levels to check for centering
+ */
+centerChartByVisibleLevels(levelCount) {
+  if (!this.chartContainer || !this.container || !levelCount) return;
+
+  // Get all visible nodes
+  const visibleNodes = Array.from(
+    this.chartContainer.querySelectorAll('.node')
+  ).filter(node => {
+    // A node is visible if itself and all its ancestors are visible
+    let current = node;
+    while (current && current !== this.chartContainer) {
+      // If this element or any of its parents is hidden, the node is not visible
+      if (current.classList.contains('hidden') ||
+          window.getComputedStyle(current).display === 'none') {
+        return false;
+      }
+      current = current.parentElement;
+    }
+    return true;
+  });
+
+  // Count unique visible levels
+  const visibleLevels = new Set();
+  visibleNodes.forEach(node => {
+    const level = parseInt(node.getAttribute('data-level')) || 0;
+    visibleLevels.add(level);
+  });
+
+  // If the number of visible levels matches our target, center the chart
+  if (visibleLevels.size === levelCount) {
+    // Calculate the bounds of all visible nodes
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    visibleNodes.forEach(node => {
+      const rect = node.getBoundingClientRect();
+      minX = Math.min(minX, rect.left);
+      minY = Math.min(minY, rect.top);
+      maxX = Math.max(maxX, rect.right);
+      maxY = Math.max(maxY, rect.bottom);
+    });
+
+    // Get container dimensions
+    const containerRect = this.container.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    const containerHeight = containerRect.height;
+
+    // Calculate center points
+    const nodeCenterX = (minX + maxX) / 2;
+    const nodeCenterY = (minY + maxY) / 2;
+
+    const containerCenterX = containerRect.left + containerWidth / 2;
+    const containerCenterY = containerRect.top + containerHeight / 2;
+
+    // Calculate displacement needed to center
+    const deltaX = containerCenterX - nodeCenterX;
+    const deltaY = containerCenterY - nodeCenterY;
+
+    // Update position maintaining scale
+    this.chartContainer.style.transition = 'transform 0.3s ease-out';
+    this.translateX += deltaX;
+    this.translateY += deltaY;
+
+    // Apply transformation
+    this.chartContainer.style.transform =
+      `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+
+    // Remove transition after completion
+    setTimeout(() => {
+      this.chartContainer.style.transition = '';
+    }, 300);
+  }
 }
 }
 
