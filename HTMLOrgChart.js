@@ -196,53 +196,85 @@ class HTMLOrgChart {
 
   /**
    * Procesa los datos para convertirlos en estructura jerárquica
+   * Mejorado para manejar datos con posibles duplicados o inconsistencias
    */
   processData() {
     const data = this.data.tree || this.data;
 
-    // Eliminar duplicados de los datos de entrada basándose solo en ID
-    const uniqueData = [];
-    const seenIds = new Set();
-
+    // Paso 1: Agrupar nodos por nombre para detectar posibles duplicados
+    const nodesByName = new Map();
     for (const node of data) {
-      if (!seenIds.has(node.id)) {
-        seenIds.add(node.id);
-        uniqueData.push(node);
+      if (!nodesByName.has(node.name)) {
+        nodesByName.set(node.name, []);
+      }
+      nodesByName.get(node.name).push(node);
+    }
+
+    // Paso 2: Resolver duplicados y crear mapa principal
+    const nodeMap = new Map();
+    const duplicateLog = [];
+
+    for (const [name, nodes] of nodesByName.entries()) {
+      if (nodes.length > 1) {
+        // Hay duplicados, priorizar el que tiene hijos (pid aparece como id de otro nodo)
+        let primaryNode = nodes[0];
+        const childRefCount = new Map();
+
+        // Contar cuántos nodos tienen a cada ID como padre
+        for (const node of data) {
+          if (node.pid) {
+            childRefCount.set(node.pid, (childRefCount.get(node.pid) || 0) + 1);
+          }
+        }
+
+        // Encontrar el nodo que más hijos tiene
+        for (const node of nodes) {
+          const childCount = childRefCount.get(node.id) || 0;
+          const primaryChildCount = childRefCount.get(primaryNode.id) || 0;
+
+          if (childCount > primaryChildCount) {
+            primaryNode = node;
+          }
+        }
+
+        // Registrar duplicados resueltos para referencia
+        duplicateLog.push({
+          name,
+          selectedId: primaryNode.id,
+          allIds: nodes.map(n => n.id)
+        });
+
+        // Solo agregar el nodo principal al mapa
+        nodeMap.set(primaryNode.id, { ...primaryNode, children: [], level: 0 });
+      } else {
+        // No hay duplicados, agregar normalmente
+        const node = nodes[0];
+        nodeMap.set(node.id, { ...node, children: [], level: 0 });
       }
     }
 
-    // Crear un mapa para buscar nodos por ID
-    const nodeMap = new Map();
-
-    // Primera pasada: agregar todos los nodos al mapa
-    uniqueData.forEach(node => {
-      // Crear una copia del nodo con un array de hijos vacío
-      const processedNode = { ...node, children: [], level: 0 };
-
-      // Añadir el nodo al mapa
-      nodeMap.set(node.id, processedNode);
-    });
-
-    // Segunda pasada: construir la jerarquía y determinar niveles
+    // Paso 3: Construir la jerarquía basada en el mapa limpio
     const rootNodes = [];
 
-    uniqueData.forEach(node => {
-      const processedNode = nodeMap.get(node.id);
-
-      // Si el nodo tiene un padre, añadirlo como hijo de ese padre
+    // Recorrer los nodos para establecer las relaciones padre-hijo
+    for (const [id, node] of nodeMap.entries()) {
       if (node.pid && nodeMap.has(node.pid)) {
+        // Tiene un padre válido
         const parentNode = nodeMap.get(node.pid);
-        processedNode.level = parentNode.level + 1;
-        parentNode.children.push(processedNode);
+        node.level = parentNode.level + 1;
+        parentNode.children.push(node);
       } else {
-        // Si no tiene padre, es un nodo raíz (nivel 0)
-        processedNode.level = 0;
-        rootNodes.push(processedNode);
+        // Es un nodo raíz
+        node.level = 0;
+        rootNodes.push(node);
       }
-    });
+    }
 
     // Ordenar nodos según configuración
     this.sortNodes(rootNodes);
+
+    // Registrar estadísticas para depuración
+    console.debug(`Procesamiento de datos: ${data.length} nodos totales, ${nodeMap.size} nodos únicos, ${rootNodes.length} nodos raíz, ${duplicateLog.length} duplicados resueltos`);
 
     // Almacenar datos procesados
     this.hierarchicalData = rootNodes;
@@ -632,6 +664,7 @@ class HTMLOrgChart {
     setTimeout(() => {
       // Redibujamos todos los conectores
       this.redrawAllConnectors();
+      // El método redrawAllConnectors ya llama a _centerSingleVisibleNode
 
       // Al contraer nodos:
       // - No recalcular posición para evitar movimientos bruscos
@@ -1256,8 +1289,76 @@ redrawAllConnectors() {
       }
     });
 
+    // 4. Verificar si solo hay un nodo visible y centrarlo en ese caso
+    this._centerSingleVisibleNode();
+
   } catch (error) {
     console.error("Error en redrawAllConnectors:", error);
+  }
+}
+
+/**
+ * Verifica si solo hay un nodo visible en el organigrama y lo centra
+ * @private
+ */
+_centerSingleVisibleNode() {
+  if (!this.chartContainer || !this.container) return;
+
+  // Contar nodos visibles (no ocultos)
+  const visibleNodes = Array.from(
+    this.chartContainer.querySelectorAll('.node')
+  ).filter(node => {
+    // Un nodo es visible si él mismo y todos sus ancestros están visibles
+    let current = node;
+    while (current && current !== this.chartContainer) {
+      // Si este elemento o cualquiera de sus padres está oculto, el nodo no es visible
+      if (current.classList.contains('hidden') ||
+          window.getComputedStyle(current).display === 'none') {
+        return false;
+      }
+      current = current.parentElement;
+    }
+    return true;
+  });
+
+  // Si solo hay un nodo visible, centrarlo
+  if (visibleNodes.length === 1) {
+    const singleNode = visibleNodes[0];
+
+    // Obtener las dimensiones del contenedor y el nodo
+    const containerRect = this.container.getBoundingClientRect();
+    const nodeRect = singleNode.getBoundingClientRect();
+
+    // Calcular la posición central
+    const containerCenterX = containerRect.width / 2;
+    const containerCenterY = containerRect.height / 2;
+
+    // Calcular la posición actual del nodo (teniendo en cuenta la escala)
+    const nodeCenterX = nodeRect.left + nodeRect.width / 2 - containerRect.left;
+    const nodeCenterY = nodeRect.top + nodeRect.height / 2 - containerRect.top;
+
+    // Calcular el desplazamiento necesario para centrar
+    const deltaX = containerCenterX - nodeCenterX;
+    const deltaY = containerCenterY - nodeCenterY;
+
+    // Si el nodo está significativamente descentrado, aplicar centrado suave
+    if (Math.abs(deltaX) > 20 || Math.abs(deltaY) > 20) {
+      // Usando una transición suave para el centrado
+      this.chartContainer.style.transition = 'transform 0.3s ease-out';
+
+      // Actualizar la posición manteniendo la escala
+      this.translateX += deltaX;
+      this.translateY += deltaY;
+
+      // Aplicar la transformación
+      this.chartContainer.style.transform =
+        `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+
+      // Eliminar la transición después de que se complete
+      setTimeout(() => {
+        this.chartContainer.style.transition = '';
+      }, 300);
+    }
   }
 }
 
