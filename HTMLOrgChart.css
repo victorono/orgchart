@@ -1,5 +1,10 @@
 /* HTMLOrgChart.css - Estilos para organigrama usando UL/LI */
 
+/* Estilos generales */
+:root {
+  --max-with: 180px;
+}
+
 div#org-chart-container {
   background-color: #fff;
 }
@@ -161,7 +166,7 @@ div#org-chart-container {
   font-size: 14px;
   color: #111827;
   margin: 10px 0 5px;
-  max-width: 180px;
+  max-width: var(--max-with);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -177,7 +182,7 @@ div#org-chart-container {
   font-size: 12px;
   color: #6b7280;
   margin: 5px 0;
-  max-width: 150px;
+  max-width: var(--max-with);
   overflow: hidden;
   text-overflow: ellipsis;
 }
