@@ -4,6 +4,18 @@
  */
 class HTMLOrgChart {
   constructor(config) {
+    // Constantes para los tiempos de timeout (en milisegundos)
+    this.TIMEOUTS = {
+      INITIAL_CENTER: 300,       // Tiempo para centrar inicialmente
+      CENTER_VERIFICATION: 500,  // Verificación adicional de centrado
+      CONNECTOR_REDRAW: 50,      // Tiempo para redibujar conectores
+      NODE_TOGGLE_UPDATE: 300,   // Tiempo para actualizar DOM después de expandir/colapsar
+      WHEEL_ZOOM_DEBOUNCE: 100,  // Debounce para zoom con rueda
+      RENDER_CONNECTORS: 100,    // Tiempo para renderizar conectores iniciales
+      FULLSCREEN_ADJUST: 100,    // Tiempo para ajuste después de pantalla completa
+      AUTO_ZOOM_ADJUST: 100      // Tiempo para ajuste automático de zoom
+    };
+
     // Validar configuración básica
     if (!config.container) {
       throw new Error('Debe especificarse un contenedor');
@@ -79,8 +91,8 @@ class HTMLOrgChart {
       // Verificación adicional después de un tiempo mayor
       setTimeout(() => {
         this.forceCenterWithScale(this.options.initialZoom);
-      }, 500);
-    }, 300);
+      }, this.TIMEOUTS.CENTER_VERIFICATION);
+    }, this.TIMEOUTS.INITIAL_CENTER);
   }
 
   /**
@@ -134,7 +146,7 @@ class HTMLOrgChart {
     this.setupBoundaries();
 
     // Redibujar los conectores después del centrado
-    setTimeout(() => this.redrawAllConnectors(), 50);
+    setTimeout(() => this.redrawAllConnectors(), this.TIMEOUTS.CONNECTOR_REDRAW);
   }
 
   /**
@@ -341,7 +353,7 @@ class HTMLOrgChart {
     this.createControls();
 
     // Ajustar las líneas de conexión después de renderizar
-    setTimeout(() => this.redrawAllConnectors(), 100);
+    setTimeout(() => this.redrawAllConnectors(), this.TIMEOUTS.RENDER_CONNECTORS);
   }
 
   /**
@@ -639,7 +651,7 @@ class HTMLOrgChart {
           }
         }
       }
-    }, 300);
+    }, this.TIMEOUTS.NODE_TOGGLE_UPDATE);
   }
 
   /**
@@ -805,7 +817,7 @@ class HTMLOrgChart {
         fullscreenBtn.title = 'Salir de pantalla completa';
 
         // Recentrar el organigrama en el nuevo contenedor
-        setTimeout(() => this.forceCenterWithScale(this.scale), 100);
+        setTimeout(() => this.forceCenterWithScale(this.scale), this.TIMEOUTS.FULLSCREEN_ADJUST);
 
         isFullscreen = true;
       } else {
@@ -825,7 +837,7 @@ class HTMLOrgChart {
         fullscreenBtn.title = 'Pantalla completa';
 
         // Recentrar el organigrama en el contenedor original
-        setTimeout(() => this.forceCenterWithScale(this.scale), 100);
+        setTimeout(() => this.forceCenterWithScale(this.scale), this.TIMEOUTS.FULLSCREEN_ADJUST);
 
         isFullscreen = false;
       }
@@ -1036,7 +1048,7 @@ class HTMLOrgChart {
       clearTimeout(self.wheelZoomTimeout);
       self.wheelZoomTimeout = setTimeout(() => {
         self.redrawAllConnectors();
-      }, 100);
+      }, self.TIMEOUTS.WHEEL_ZOOM_DEBOUNCE);
     };
 
     // Registrar evento de rueda
@@ -1195,7 +1207,7 @@ class HTMLOrgChart {
     this.initialize();
 
     // Ajustar zoom automáticamente para mostrar todo el contenido
-    setTimeout(() => this.autoAdjustZoom(), 100);
+    setTimeout(() => this.autoAdjustZoom(), this.TIMEOUTS.AUTO_ZOOM_ADJUST);
   }
 /**
  * Redibuja todos los conectores del organigrama teniendo en cuenta la escala
