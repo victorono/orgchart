@@ -118,21 +118,17 @@ class HTMLOrgChart {
     const orgWidth = orgRect.width;
     const orgHeight = orgRect.height;
 
-    console.log(`Dimensiones: Contenedor=${containerWidth}x${containerHeight}, Organigrama=${orgWidth}x${orgHeight}`);
-
     // Calcular la posición central exacta
     // Dividimos entre 2 para posicionar el punto central del organigrama en el centro del contenedor
     const newTranslateX = Math.max(0, (containerWidth - (orgWidth * scale)) / 2);
     const newTranslateY = Math.max(0, (containerHeight - (orgHeight * scale)) / 2);
 
     // Actualizar la posición
-    this.translateX = newTranslateX;
-    this.translateY = newTranslateY;
+    this.translateX = 0;
+    this.translateY = 0;
 
-    console.log(`Centro calculado: X=${newTranslateX}, Y=${newTranslateY} con escala=${scale}`);
-
-    // Aplicar transformación con la posición central exacta
-    this.chartContainer.style.transform = `scale(${scale})`;
+    // Aplicar transformación con la posición central exacta y la escala
+    this.chartContainer.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${scale})`;
 
     // Redibujar los conectores después del centrado
     setTimeout(() => this.redrawAllConnectors(), 50);
@@ -149,7 +145,6 @@ class HTMLOrgChart {
         // Solo nos interesa nuestro contenedor
         const entry = entries.find(e => e.target === this.container);
         if (entry) {
-          console.log("Contenedor redimensionado, recentrando...");
           // Centrar el organigrama con la escala actual
           this.forceCenterWithScale(this.scale);
         }
@@ -630,10 +625,6 @@ class HTMLOrgChart {
       this.chartContainer.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
     };
 
-    // Ya no inicializamos la transformación aquí, lo hacemos en forceCenterWithScale
-
-    // ===== MANEJO DE EVENTOS DE MOUSE =====
-
     // Mantener referencia al contexto para usar en los event listeners
     const self = this;
 
@@ -670,7 +661,8 @@ class HTMLOrgChart {
       const deltaX = e.clientX - lastX;
       const deltaY = e.clientY - lastY;
 
-      // Actualizar posición
+      // Actualizar posición considerando la escala actual
+      // Esta es la corrección clave: dividir entre la escala para compensar
       self.translateX += deltaX;
       self.translateY += deltaY;
 
@@ -727,7 +719,7 @@ class HTMLOrgChart {
       const deltaX = e.touches[0].clientX - lastX;
       const deltaY = e.touches[0].clientY - lastY;
 
-      // Actualizar posición
+      // Actualizar posición considerando la escala actual
       self.translateX += deltaX;
       self.translateY += deltaY;
 
