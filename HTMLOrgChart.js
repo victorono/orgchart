@@ -1,24 +1,24 @@
 /**
- * HTMLOrgChart.js - Biblioteca ligera para generar organigramas con HTML y CSS
- * Implementación con estructura UL/LI para mejor jerarquía y conexiones basadas en CSS
+ * HTMLOrgChart.js - Lightweight library for generating organization charts with HTML and CSS
+ * Implementation with UL/LI structure for better hierarchy and CSS-based connections
  */
 class HTMLOrgChart {
   constructor(config) {
-    // Validar configuración básica
+    // Validate basic configuration
     if (!config.container) {
-      throw new Error('Debe especificarse un contenedor');
+      throw new Error('A container must be specified');
     }
     if (!config.data) {
-      throw new Error('Se requieren datos para generar el organigrama');
+      throw new Error('Data is required to generate the organization chart');
     }
 
-    // Obtener elemento contenedor
+    // Get container element
     this.container = document.getElementById(config.container);
     if (!this.container) {
-      throw new Error(`Contenedor con ID '${config.container}' no encontrado`);
+      throw new Error(`Container with ID '${config.container}' not found`);
     }
 
-    // Configuración predeterminada
+    // Default configuration
     const defaultOptions = {
       nodeWidth: 180,
       nodeHeight: 140,
@@ -36,29 +36,29 @@ class HTMLOrgChart {
       sortFunction: null,
       showSortControls: false,
       initialZoom: 0.8,
-      minHeight: '300px', // Altura mínima predeterminada
+      minHeight: '300px', // Default minimum height
       fullscreenBgColor: '#fff',
-      // Valores predeterminados para los tiempos de timeout (en milisegundos)
+      // Default timeout values (in milliseconds)
       timeouts: {
-        initialCenter: 300,       // Tiempo para centrar inicialmente
-        centerVerification: 500,  // Verificación adicional de centrado
-        connectorRedraw: 50,      // Tiempo para redibujar conectores
-        nodeToggleUpdate: 300,    // Tiempo para actualizar DOM después de expandir/colapsar
-        wheelZoomDebounce: 100,   // Debounce para zoom con rueda
-        renderConnectors: 100,    // Tiempo para renderizar conectores iniciales
-        fullscreenAdjust: 100,    // Tiempo para ajuste después de pantalla completa
-        autoZoomAdjust: 100       // Tiempo para ajuste automático de zoom
+        initialCenter: 300,       // Time for initial centering
+        centerVerification: 500,  // Additional centering verification
+        connectorRedraw: 50,      // Time to redraw connectors
+        nodeToggleUpdate: 300,    // Time to update DOM after expanding/collapsing
+        wheelZoomDebounce: 100,   // Debounce for wheel zoom
+        renderConnectors: 100,    // Time to render initial connectors
+        fullscreenAdjust: 100,    // Time for adjustment after fullscreen
+        autoZoomAdjust: 100       // Time for auto zoom adjustment
       }
     };
 
-    // Combinar opciones predeterminadas con las proporcionadas
+    // Combine default options with provided ones
     this.options = { ...defaultOptions, ...(config.options || {}) };
 
-    // Asegurarse de que la propiedad timeouts exista y combinar con valores por defecto
+    // Ensure timeouts property exists and combine with defaults
     if (!this.options.timeouts) this.options.timeouts = {};
     this.options.timeouts = { ...defaultOptions.timeouts, ...this.options.timeouts };
 
-    // Configurar los timeouts como propiedades para compatibilidad con código existente
+    // Configure timeouts as properties for compatibility with existing code
     this.TIMEOUTS = {
       INITIAL_CENTER: this.options.timeouts.initialCenter,
       CENTER_VERIFICATION: this.options.timeouts.centerVerification,
@@ -70,41 +70,41 @@ class HTMLOrgChart {
       AUTO_ZOOM_ADJUST: this.options.timeouts.autoZoomAdjust
     };
 
-    // Datos del organigrama
+    // Organization chart data
     this.data = config.data;
 
-    // Datos procesados en formato jerárquico
+    // Processed data in hierarchical format
     this.hierarchicalData = null;
 
-    // Mapa para almacenar el estado de expansión de los nodos
+    // Map to store node expansion state
     this.expandedNodes = new Map();
 
-    // Inicializar
+    // Initialize
     this.initialize();
   }
 
   /**
-   * Inicializa el organigrama
+   * Initializes the organization chart
    */
   initialize() {
-    // Procesar datos
+    // Process data
     this.processData();
 
-    // Renderizar
+    // Render
     this.render();
 
-    // Configurar controles de zoom y arrastre
+    // Setup zoom and drag controls
     this.setupZoomControls();
 
-    // Configurar observador de redimensionamiento si está disponible
+    // Setup resize observer if available
     this.setupResizeObserver();
 
-    // Asegurar que el organigrama esté centrado inicialmente
-    // con un retraso apropiado para permitir que el DOM se renderice completamente
+    // Ensure the organization chart is initially centered
+    // with an appropriate delay to allow the DOM to fully render
     setTimeout(() => {
       this.forceCenterWithScale(this.options.initialZoom);
 
-      // Verificación adicional después de un tiempo mayor
+      // Additional verification after a longer time
       setTimeout(() => {
         this.forceCenterWithScale(this.options.initialZoom);
       }, this.TIMEOUTS.CENTER_VERIFICATION);
@@ -112,111 +112,111 @@ class HTMLOrgChart {
   }
 
   /**
-   * Fuerza el centrado del organigrama con una escala específica
-   * @param {number} scale - La escala a aplicar
+   * Forces the organization chart to center with a specific scale
+   * @param {number} scale - The scale to apply
    */
   forceCenterWithScale(scale) {
     if (!this.chartContainer || !this.container) return;
 
-    // Asegurar que la escala sea válida
+    // Ensure the scale is valid
     if (isNaN(scale) || scale <= 0) {
-      scale = 1; // Valor por defecto si la escala es inválida
+      scale = 1; // Default value if scale is invalid
     }
 
-    // Establecer la escala actual
+    // Set the current scale
     this.scale = scale;
 
-    // Obtener dimensiones del contenedor
+    // Get container dimensions
     const containerRect = this.container.getBoundingClientRect();
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
 
-    // Para obtener medidas precisas, quitar temporalmente cualquier transformación
+    // To get accurate measurements, temporarily remove any transformation
     const originalTransform = this.chartContainer.style.transform;
     this.chartContainer.style.transform = '';
 
-    // Obtener el organigrama y sus dimensiones reales
+    // Get the organization chart and its actual dimensions
     const orgChart = this.chartContainer.querySelector('.organigrama');
     if (!orgChart) {
       this.chartContainer.style.transform = originalTransform;
       return;
     }
 
-    // Usar getBoundingClientRect para dimensiones exactas
+    // Use getBoundingClientRect for exact dimensions
     const orgRect = orgChart.getBoundingClientRect();
     const orgWidth = orgRect.width;
     const orgHeight = orgRect.height;
 
-    // Calcular la posición central exacta
+    // Calculate the exact central position
     const newTranslateX = Math.max(0, (containerWidth - (orgWidth * scale)) / 2);
     const newTranslateY = Math.max(0, (containerHeight - (orgHeight * scale)) / 2);
 
-    // Actualizar la posición
+    // Update the position
     this.translateX = 0;
     this.translateY = 0;
 
-    // Aplicar transformación con la posición central exacta y la escala
+    // Apply transformation with the exact central position and scale
     this.chartContainer.style.transform = `scale(${scale})`;
 
-    // Impedir que el usuario pueda arrastrar el organigrama fuera de los límites visibles
+    // Prevent the user from dragging the organization chart out of visible bounds
     this.setupBoundaries();
 
-    // Redibujar los conectores después del centrado
+    // Redraw connectors after centering
     setTimeout(() => this.redrawAllConnectors(), this.TIMEOUTS.CONNECTOR_REDRAW);
   }
 
   /**
-   * Detectar cuando el contenedor cambia de tamaño para recentrar
-   * Este método se llama automáticamente si hay un ResizeObserver disponible
+   * Detect when the container resizes to re-center
+   * This method is called automatically if a ResizeObserver is available
    */
   setupResizeObserver() {
     if (typeof ResizeObserver !== 'undefined') {
-      // Crear un observador de redimensionamiento para el contenedor
+      // Create a resize observer for the container
       this.resizeObserver = new ResizeObserver(entries => {
-        // Solo nos interesa nuestro contenedor
+        // Only interested in our container
         const entry = entries.find(e => e.target === this.container);
         if (entry) {
-          // Manejar el cambio de tamaño
+          // Handle the resize
           this.handleResize();
         }
       });
 
-      // Comenzar a observar el contenedor
+      // Start observing the container
       this.resizeObserver.observe(this.container);
     }
 
-    // Escuchar también el evento de redimensionamiento de la ventana
+    // Also listen to the window resize event
     window.addEventListener('resize', () => this.handleResize());
   }
 
   /**
-   * Centra el organigrama con un nivel de zoom específico
-   * @param {number} zoomLevel - Nivel de zoom a aplicar
+   * Centers the organization chart with a specific zoom level
+   * @param {number} zoomLevel - Zoom level to apply
    */
   centerChartWithZoom(zoomLevel) {
     if (!this.chartContainer || !this.container) return;
 
-    // Verificar valores inválidos
+    // Check for invalid values
     if (isNaN(zoomLevel) || zoomLevel <= 0) {
-      // console.warn("Zoom inválido en centerChartWithZoom:", zoomLevel);
+      // console.warn("Invalid zoom in centerChartWithZoom:", zoomLevel);
       zoomLevel = this.options.initialZoom;
     }
 
-    // Actualizar escala
+    // Update scale
     this.scale = zoomLevel;
 
-    // Asegurar que los conectores se mantengan visibles
+    // Ensure connectors remain visible
     this.redrawAllConnectors();
   }
 
   /**
-   * Procesa los datos para convertirlos en estructura jerárquica
-   * Mejorado para manejar datos con posibles duplicados o inconsistencias
+   * Processes the data to convert it into a hierarchical structure
+   * Improved to handle data with possible duplicates or inconsistencies
    */
   processData() {
     const data = this.data.tree || this.data;
 
-    // Paso 1: Agrupar nodos por nombre para detectar posibles duplicados
+    // Step 1: Group nodes by name to detect possible duplicates
     const nodesByName = new Map();
     for (const node of data) {
       if (!nodesByName.has(node.name)) {
@@ -225,24 +225,24 @@ class HTMLOrgChart {
       nodesByName.get(node.name).push(node);
     }
 
-    // Paso 2: Resolver duplicados y crear mapa principal
+    // Step 2: Resolve duplicates and create main map
     const nodeMap = new Map();
     const duplicateLog = [];
 
     for (const [name, nodes] of nodesByName.entries()) {
       if (nodes.length > 1) {
-        // Hay duplicados, priorizar el que tiene hijos (pid aparece como id de otro nodo)
+        // There are duplicates, prioritize the one with children (pid appears as id of another node)
         let primaryNode = nodes[0];
         const childRefCount = new Map();
 
-        // Contar cuántos nodos tienen a cada ID como padre
+        // Count how many nodes have each ID as parent
         for (const node of data) {
           if (node.pid) {
             childRefCount.set(node.pid, (childRefCount.get(node.pid) || 0) + 1);
           }
         }
 
-        // Encontrar el nodo que más hijos tiene
+        // Find the node with the most children
         for (const node of nodes) {
           const childCount = childRefCount.get(node.id) || 0;
           const primaryChildCount = childRefCount.get(primaryNode.id) || 0;
@@ -252,54 +252,54 @@ class HTMLOrgChart {
           }
         }
 
-        // Registrar duplicados resueltos para referencia
+        // Log resolved duplicates for reference
         duplicateLog.push({
           name,
           selectedId: primaryNode.id,
           allIds: nodes.map(n => n.id)
         });
 
-        // Solo agregar el nodo principal al mapa
+        // Only add the primary node to the map
         nodeMap.set(primaryNode.id, { ...primaryNode, children: [], level: 0 });
       } else {
-        // No hay duplicados, agregar normalmente
+        // No duplicates, add normally
         const node = nodes[0];
         nodeMap.set(node.id, { ...node, children: [], level: 0 });
       }
     }
 
-    // Paso 3: Construir la jerarquía basada en el mapa limpio
+    // Step 3: Build the hierarchy based on the clean map
     const rootNodes = [];
 
-    // Recorrer los nodos para establecer las relaciones padre-hijo
+    // Traverse nodes to establish parent-child relationships
     for (const [id, node] of nodeMap.entries()) {
       if (node.pid && nodeMap.has(node.pid)) {
-        // Tiene un padre válido
+        // Has a valid parent
         const parentNode = nodeMap.get(node.pid);
         node.level = parentNode.level + 1;
         parentNode.children.push(node);
       } else {
-        // Es un nodo raíz
+        // It's a root node
         node.level = 0;
         rootNodes.push(node);
       }
     }
 
-    // Ordenar nodos según configuración
+    // Sort nodes according to configuration
     this.sortNodes(rootNodes);
 
-    // Registrar estadísticas para depuración
-    console.debug(`Procesamiento de datos: ${data.length} nodos totales, ${nodeMap.size} nodos únicos, ${rootNodes.length} nodos raíz, ${duplicateLog.length} duplicados resueltos`);
+    // Log statistics for debugging
+    console.debug(`Data processing: ${data.length} total nodes, ${nodeMap.size} unique nodes, ${rootNodes.length} root nodes, ${duplicateLog.length} resolved duplicates`);
 
-    // Almacenar datos procesados
+    // Store processed data
     this.hierarchicalData = rootNodes;
 
-    // Configurar expansión inicial
+    // Configure initial expansion
     this.configureInitialExpansion();
   }
 
   /**
-   * Configura el estado de expansión inicial de los nodos según el nivel jerárquico
+   * Configure initial expansion state of nodes based on hierarchical level
    */
   configureInitialExpansion() {
     const configureExpansion = (nodes, level) => {
@@ -313,18 +313,18 @@ class HTMLOrgChart {
       });
     };
 
-    // Comenzar desde nodos raíz (nivel 0)
+    // Start from root nodes (level 0)
     configureExpansion(this.hierarchicalData, 0);
   }
 
   /**
-   * Ordena los nodos en el árbol según las opciones configuradas
-   * @param {Array} nodes - Los nodos a ordenar
+   * Sorts the nodes in the tree according to the configured options
+   * @param {Array} nodes - The nodes to sort
    */
   sortNodes(nodes) {
     if (!nodes || !nodes.length) return;
 
-    // Ordenar por el campo especificado
+    // Sort by the specified field
     const sortField = this.options.sortBy;
     const isAscending = this.options.sortDirection === 'asc';
 
@@ -332,7 +332,7 @@ class HTMLOrgChart {
       let valA = a[sortField] || '';
       let valB = b[sortField] || '';
 
-      // Comparaciones de cadenas insensibles a mayúsculas/minúsculas
+      // Case-insensitive string comparisons
       if (typeof valA === 'string') valA = valA.toLowerCase();
       if (typeof valB === 'string') valB = valB.toLowerCase();
 
@@ -341,7 +341,7 @@ class HTMLOrgChart {
       return 0;
     });
 
-    // Ordenar recursivamente los hijos
+    // Recursively sort children
     for (const node of nodes) {
       if (node.children && node.children.length) {
         this.sortNodes(node.children);
@@ -350,75 +350,75 @@ class HTMLOrgChart {
   }
 
   /**
-   * Renderiza el organigrama completo
+   * Renders the entire organization chart
    */
   render() {
-    // Limpiar el contenedor
+    // Clear the container
     this.container.innerHTML = '';
 
-    // Aplicar estilo para mantener el contenido dentro de los límites
+    // Apply style to keep content within bounds
     this.container.style.overflow = 'hidden';
     this.container.style.position = 'relative';
 
-    // Aplicar altura mínima si está establecida
+    // Apply minimum height if set
     if (this.options.minHeight) {
       this.container.style.minHeight = typeof this.options.minHeight === 'number'
         ? `${this.options.minHeight}px`
         : this.options.minHeight;
     }
 
-    // Crear contenedor principal del organigrama con capacidad de zoom y arrastre
+    // Create main container for the organization chart with zoom and drag capability
     const chartContainer = document.createElement('div');
     chartContainer.className = 'org-chart-container';
 
-    // Asegurar que el contenedor del organigrama ocupe todo el espacio disponible
+    // Ensure the organization chart container takes up all available space
     chartContainer.style.width = '100%';
     chartContainer.style.height = '100%';
     chartContainer.style.position = 'absolute';
 
     this.chartContainer = chartContainer;
 
-    // Crear el árbol jerárquico usando UL/LI para mejor estructura
+    // Create the hierarchical tree using UL/LI for better structure
     const orgChart = document.createElement('div');
     orgChart.className = 'organigrama';
 
-    // Crear la lista de nodos raíz
+    // Create the list of root nodes
     const rootList = document.createElement('ul');
     rootList.className = 'nodes';
 
-    // Renderizar nodos recursivamente usando la estructura UL/LI
+    // Render nodes recursively using the UL/LI structure
     this.hierarchicalData.forEach(node => {
-      const nodeElement = this.renderNodeUL(node, 1); // Comenzar en nivel 1
+      const nodeElement = this.renderNodeUL(node, 1); // Start at level 1
       rootList.appendChild(nodeElement);
     });
 
-    // Armar la estructura completa
+    // Assemble the complete structure
     orgChart.appendChild(rootList);
     chartContainer.appendChild(orgChart);
     this.container.appendChild(chartContainer);
 
-    // Crear controles de navegación (zoom, expand/collapse, etc.)
+    // Create navigation controls (zoom, expand/collapse, etc.)
     this.createControls();
 
-    // Ajustar las líneas de conexión después de renderizar
+    // Adjust connection lines after rendering
     setTimeout(() => this.redrawAllConnectors(), this.TIMEOUTS.RENDER_CONNECTORS);
   }
 
   /**
-   * Renderiza un nodo usando estructura UL/LI para mejor jerarquía
-   * @param {Object} node - Nodo a renderizar
-   * @param {number} level - Nivel jerárquico del nodo
-   * @returns {HTMLElement} - Elemento LI que representa el nodo y sus hijos
+   * Renders a node using UL/LI structure for better hierarchy
+   * @param {Object} node - Node to render
+   * @param {number} level - Hierarchical level of the node
+   * @returns {HTMLElement} - LI element representing the node and its children
    */
   renderNodeUL(node, level) {
-    // Crear elemento LI para este nodo y sus hijos
+    // Create LI element for this node and its children
     const hierarchyItem = document.createElement('li');
     hierarchyItem.className = 'hierarchy';
 
-    // Determinar si el nodo está expandido
+    // Determine if the node is expanded
     const isExpanded = this.expandedNodes.get(node.id);
 
-    // Marcar si está expandido o colapsado
+    // Mark if expanded or collapsed
     if (node.children && node.children.length > 0) {
       if (isExpanded) {
         hierarchyItem.classList.add('isOpen');
@@ -426,24 +426,24 @@ class HTMLOrgChart {
         hierarchyItem.classList.add('isChildrenCollapsed');
       }
 
-      // Añadir clase para nodos con muchos hijos
+      // Add class for nodes with many children
       if (node.children.length > 3) {
         hierarchyItem.classList.add('multi-children');
       }
     }
 
-    // Crear el nodo en sí mismo
+    // Create the node itself
     const nodeDiv = document.createElement('div');
     nodeDiv.className = 'node';
     nodeDiv.id = node.id;
     nodeDiv.setAttribute('data-level', level);
 
-    // Hacer que el nodo entero sea clicable para expandir/contraer
+    // Make the entire node clickable to expand/collapse
     if (node.children && node.children.length > 0) {
       nodeDiv.classList.add('clickable');
       nodeDiv.addEventListener('click', (e) => {
-        // Si el clic fue en el botón de expandir/contraer, no hacemos nada
-        // ya que ese evento será manejado por el listener del botón
+        // If the click was on the expand/collapse button, do nothing
+        // as that event will be handled by the button's listener
         if (e.target.closest('.edge')) {
           return;
         }
@@ -451,17 +451,17 @@ class HTMLOrgChart {
       });
     }
 
-    // Crear el contenido principal del nodo
+    // Create the main content of the node
     const contentDiv = document.createElement('div');
     contentDiv.className = 'content';
 
-    // Figura para el avatar
+    // Figure for the avatar
     const figure = document.createElement('figure');
     figure.className = 'mb-1';
 
-    // Si el nodo tiene imagen, mostrarla
+    // If the node has an image, display it
     if (node.img) {
-      // Crear avatar con SVG para soporte de imagen circular
+      // Create avatar with SVG for circular image support
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('width', '80');
       svg.setAttribute('height', '80');
@@ -470,7 +470,7 @@ class HTMLOrgChart {
 
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
-      // Crear patrón para la imagen
+      // Create pattern for the image
       const patternId = `avatar-${node.id}`;
       const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
       pattern.setAttribute('id', patternId);
@@ -482,36 +482,36 @@ class HTMLOrgChart {
       image.setAttributeNS('http://www.w3.org/1999/xlink', 'href', node.img);
       image.setAttribute('width', '80');
       image.setAttribute('height', '80');
-      image.setAttribute('preserveAspectRatio', 'xMidYMid slice'); // Mantener proporción y centrar
+      image.setAttribute('preserveAspectRatio', 'xMidYMid slice'); // Maintain aspect ratio and center
       image.setAttribute('x', '0');
       image.setAttribute('y', '0');
 
-      // Manejar error 404 para imágenes no encontradas
+      // Handle 404 error for images not found
       image.addEventListener('error', () => {
-        // Eliminar la imagen con error
+        // Remove the image with error
         pattern.removeChild(image);
 
-        // Reemplazar con un placeholder de texto
+        // Replace with a text placeholder
         const fallbackGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
-        // Fondo circular en color de relleno
+        // Circular background in fill color
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', '40');
         circle.setAttribute('cy', '40');
         circle.setAttribute('r', '40');
         circle.setAttribute('fill', this.options.nodeColor || '#4ade80');
 
-        // Texto con iniciales - mejorado para centrado perfecto
+        // Text with initials - improved for perfect centering
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', '40');
-        text.setAttribute('y', '40');  // Centrar en 40 en vez de 48
+        text.setAttribute('y', '40');  // Center at 40 instead of 48
         text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('alignment-baseline', 'central'); // Mejor propiedad para centrado vertical
-        text.setAttribute('dominant-baseline', 'central'); // Compatibilidad con más navegadores
+        text.setAttribute('alignment-baseline', 'central'); // Better property for vertical centering
+        text.setAttribute('dominant-baseline', 'central'); // Compatibility with more browsers
         text.setAttribute('fill', 'white');
         text.setAttribute('font-size', '28');
         text.setAttribute('font-weight', 'bold');
-        text.setAttribute('font-family', 'Arial, sans-serif'); // Asegurar consistencia tipográfica
+        text.setAttribute('font-family', 'Arial, sans-serif'); // Ensure typographic consistency
         text.textContent = node.name.substring(0, 2).toUpperCase();
 
         fallbackGroup.appendChild(circle);
@@ -521,13 +521,13 @@ class HTMLOrgChart {
 
       pattern.appendChild(image);
 
-      // Crear rectángulo con el patrón
+      // Create rectangle with the pattern
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       rect.setAttribute('x', '0');
       rect.setAttribute('y', '0');
       rect.setAttribute('width', '80');
       rect.setAttribute('height', '80');
-      rect.setAttribute('rx', '40'); // Radio para hacerlo circular (mitad del ancho)
+      rect.setAttribute('rx', '40'); // Radius to make it circular (half the width)
       rect.setAttribute('style', `fill: url(#${patternId});`);
 
       g.appendChild(pattern);
@@ -535,7 +535,7 @@ class HTMLOrgChart {
       svg.appendChild(g);
       figure.appendChild(svg);
     } else {
-      // Placeholder para avatar si no hay imagen
+      // Placeholder for avatar if no image
       const avatarPlaceholder = document.createElement('div');
       avatarPlaceholder.className = 'avatar-placeholder';
       avatarPlaceholder.textContent = node.name.substring(0, 2).toUpperCase();
@@ -544,7 +544,7 @@ class HTMLOrgChart {
 
     contentDiv.appendChild(figure);
 
-    // Nombre completo
+    // Full name
     const namePara = document.createElement('p');
     namePara.className = 'c-name font-size-14 fw-600 mb-2';
     const nameSpan = document.createElement('span');
@@ -553,7 +553,7 @@ class HTMLOrgChart {
     namePara.appendChild(nameSpan);
     contentDiv.appendChild(namePara);
 
-    // Cargo/título
+    // Job title
     const jobPara = document.createElement('p');
     jobPara.className = 'c-job font-size-12 fw-900 text-basic-700 mb-1';
     const jobSpan = document.createElement('span');
@@ -562,7 +562,7 @@ class HTMLOrgChart {
     jobPara.appendChild(jobSpan);
     contentDiv.appendChild(jobPara);
 
-    // Añadir información adicional si está disponible
+    // Add additional information if available
     if (node.department) {
       const deptPara = document.createElement('p');
       deptPara.className = 'font-size-12 fw-500 text-basic-700 mb-0';
@@ -573,39 +573,39 @@ class HTMLOrgChart {
       contentDiv.appendChild(deptPara);
     }
 
-    // Botón de expansión/colapso si tiene hijos
+    // Expand/collapse button if it has children
     if (node.children && node.children.length > 0) {
-      // Agregar botón para expandir/colapsar al lado derecho del nodo
+      // Add button to expand/collapse on the right side of the node
       const edgeIcon = document.createElement('i');
       edgeIcon.className = 'edge verticalEdge rightEdge oci ' +
                           (isExpanded ? 'oci-minus' : 'oci-plus');
-      // Configurar evento de clic
+      // Set up click event
       edgeIcon.addEventListener('click', (e) => {
-        e.stopPropagation(); // Evitar que el clic se propague al nodo
+        e.stopPropagation(); // Prevent click from propagating to the node
         this.toggleNode(node.id);
       });
       nodeDiv.appendChild(edgeIcon);
     }
 
-    // Ensamblar el nodo completo
+    // Assemble the complete node
     nodeDiv.appendChild(contentDiv);
     hierarchyItem.appendChild(nodeDiv);
 
-    // Renderizar hijos si hay y está expandido
+    // Render children if any and expanded
     if (node.children && node.children.length > 0) {
       const childrenList = document.createElement('ul');
       childrenList.className = 'nodes';
 
-      // Ocultar si está colapsado
+      // Hide if collapsed
       if (!isExpanded) {
         childrenList.classList.add('hidden');
       }
 
-      // Renderizar cada hijo
+      // Render each child
       node.children.forEach((childNode, index) => {
         const childElement = this.renderNodeUL(childNode, level + 1);
 
-        // Añadir clases especiales a los elementos extremos para mejor alineación
+        // Add special classes to edge elements for better alignment
         if (index === 0) {
           childElement.classList.add('first-child-node');
         }
@@ -623,51 +623,51 @@ class HTMLOrgChart {
   }
 
   /**
-   * Alterna el estado de un nodo (expandido/colapsado)
-   * @param {number|string} nodeId - ID del nodo a alternar
+   * Toggles the state of a node (expanded/collapsed)
+   * @param {number|string} nodeId - ID of the node to toggle
    */
   toggleNode(nodeId) {
-    // Cambiar estado de expansión
+    // Change expansion state
     const currentState = this.expandedNodes.get(nodeId);
-    const isExpanding = !currentState; // true si está expandiendo, false si está contrayendo
+    const isExpanding = !currentState; // true if expanding, false if collapsing
     this.expandedNodes.set(nodeId, isExpanding);
 
-    // Buscar el elemento del nodo en el DOM
+    // Find the node element in the DOM
     const nodeElement = document.querySelector(`[id="${nodeId}"]`);
     if (!nodeElement) return;
 
-    // Buscar el elemento li padre
+    // Find the parent li element
     const hierarchyElement = nodeElement.closest('.hierarchy');
     if (!hierarchyElement) return;
 
-    // Buscar la lista de hijos
+    // Find the list of children
     const childrenList = hierarchyElement.querySelector('ul.nodes');
     if (!childrenList) return;
 
-    // Guardar el tamaño del organigrama antes de cambiar el estado
+    // Save the size of the organization chart before changing the state
     const organigramaElem = this.chartContainer.querySelector('.organigrama');
     const orgSizeBefore = organigramaElem ?
       { width: organigramaElem.offsetWidth, height: organigramaElem.offsetHeight } :
       null;
 
-    // Cambiar el estado visual
-    if (currentState) { // Estaba expandido, ahora colapsar
+    // Change the visual state
+    if (currentState) { // Was expanded, now collapse
       hierarchyElement.classList.remove('isOpen');
       hierarchyElement.classList.add('isChildrenCollapsed');
       childrenList.classList.add('hidden');
 
-      // Cambiar ícono del botón
+      // Change button icon
       const edgeIcon = nodeElement.querySelector('.edge.rightEdge');
       if (edgeIcon) {
         edgeIcon.classList.remove('oci-minus');
         edgeIcon.classList.add('oci-plus');
       }
-    } else { // Estaba colapsado, ahora expandir
+    } else { // Was collapsed, now expand
       hierarchyElement.classList.add('isOpen');
       hierarchyElement.classList.remove('isChildrenCollapsed');
       childrenList.classList.remove('hidden');
 
-      // Cambiar ícono del botón
+      // Change button icon
       const edgeIcon = nodeElement.querySelector('.edge.rightEdge');
       if (edgeIcon) {
         edgeIcon.classList.remove('oci-plus');
@@ -675,25 +675,25 @@ class HTMLOrgChart {
       }
     }
 
-    // Esperar a que el DOM se actualice completamente
+    // Wait for the DOM to fully update
     setTimeout(() => {
-      // Redibujamos todos los conectores
+      // Redraw all connectors
       this.redrawAllConnectors();
-      // El método redrawAllConnectors ya llama a _centerSingleVisibleNode
+      // The redrawAllConnectors method already calls _centerSingleVisibleNode
 
-      // Al contraer nodos:
-      // - No recalcular posición para evitar movimientos bruscos
-      // - No hacer centrado automático para evitar saltos
+      // When collapsing nodes:
+      // - Do not recalculate position to avoid abrupt movements
+      // - Do not auto-center to avoid jumps
       if (isExpanding) {
-        // Si estamos expandiendo, puede ser necesario reposicionar
-        // para mostrar el nuevo contenido
+        // If expanding, it may be necessary to reposition
+        // to show the new content
         if (orgSizeBefore && organigramaElem) {
           const orgSizeAfter = {
             width: organigramaElem.offsetWidth,
             height: organigramaElem.offsetHeight
           };
 
-          // Solo si el tamaño cambió significativamente, ajustamos la vista
+          // Only if the size changed significantly, adjust the view
           if (orgSizeAfter.width > orgSizeBefore.width * 1.3 ||
               orgSizeAfter.height > orgSizeBefore.height * 1.3) {
             this.ensureChartIsVisible();
@@ -704,8 +704,8 @@ class HTMLOrgChart {
   }
 
   /**
-   * Función ayudante para garantizar que el gráfico sea visible
-   * Modificada para ser menos intrusiva cuando se contrae un nodo
+   * Helper function to ensure the chart is visible
+   * Modified to be less intrusive when collapsing a node
    */
   ensureChartIsVisible() {
     if (!this.chartContainer || !this.container) return;
@@ -716,31 +716,31 @@ class HTMLOrgChart {
 
     const actualRect = organigramaElem.getBoundingClientRect();
 
-    // Si está completamente fuera de la vista o muy cerca del borde, ajustar
-    // pero con un enfoque menos agresivo que simplemente centrar
+    // If it's completely out of view or very close to the edge, adjust
+    // but with a less aggressive approach than simply centering
     if (actualRect.right < 0 || actualRect.left > containerRect.width ||
         actualRect.bottom < 0 || actualRect.top > containerRect.height) {
 
-      // En lugar de centrar completamente, solo ajustar lo necesario para
-      // que al menos una parte significativa sea visible
+      // Instead of fully centering, only adjust as needed to
+      // ensure at least a significant part is visible
       let newTranslateX = this.translateX;
       let newTranslateY = this.translateY;
 
-      // Ajustar horizontalmente si es necesario
-      if (actualRect.right < 50) { // Casi invisible a la izquierda
+      // Adjust horizontally if needed
+      if (actualRect.right < 50) { // Almost invisible to the left
         newTranslateX += (50 - actualRect.right);
-      } else if (actualRect.left > containerRect.width - 50) { // Casi invisible a la derecha
+      } else if (actualRect.left > containerRect.width - 50) { // Almost invisible to the right
         newTranslateX -= (actualRect.left - (containerRect.width - 50));
       }
 
-      // Ajustar verticalmente si es necesario
-      if (actualRect.bottom < 50) { // Casi invisible arriba
+      // Adjust vertically if needed
+      if (actualRect.bottom < 50) { // Almost invisible above
         newTranslateY += (50 - actualRect.bottom);
-      } else if (actualRect.top > containerRect.height - 50) { // Casi invisible abajo
+      } else if (actualRect.top > containerRect.height - 50) { // Almost invisible below
         newTranslateY -= (actualRect.top - (containerRect.height - 50));
       }
 
-      // Aplicar los ajustes solo si realmente cambiaron
+      // Apply adjustments only if they actually changed
       if (newTranslateX !== this.translateX || newTranslateY !== this.translateY) {
         this.translateX = newTranslateX;
         this.translateY = newTranslateY;
@@ -750,10 +750,10 @@ class HTMLOrgChart {
   }
 
   /**
-   * Crea los controles de navegación del organigrama
+   * Creates the navigation controls for the organization chart
    */
   createControls() {
-    // Controles inferiores (zoom)
+    // Bottom controls (zoom)
     const controlsContainer = document.createElement('div');
     controlsContainer.className = 'org-controls';
     controlsContainer.style.position = 'absolute';
@@ -761,50 +761,50 @@ class HTMLOrgChart {
     controlsContainer.style.right = '10px';
     controlsContainer.style.zIndex = '100';
 
-    // Controles de zoom
+    // Zoom controls
     const zoomControls = document.createElement('div');
     zoomControls.className = 'org-zoom-controls';
 
-    // Botón zoom out
+    // Zoom out button
     const zoomOutBtn = document.createElement('button');
     zoomOutBtn.innerHTML = '−';
-    zoomOutBtn.title = 'Reducir';
+    zoomOutBtn.title = 'Zoom out';
     zoomOutBtn.className = 'org-zoom-out';
     zoomOutBtn.addEventListener('click', () => this.adjustZoom(-0.1));
 
-    // Botón zoom in
+    // Zoom in button
     const zoomInBtn = document.createElement('button');
     zoomInBtn.innerHTML = '+';
-    zoomInBtn.title = 'Ampliar';
+    zoomInBtn.title = 'Zoom in';
     zoomInBtn.className = 'org-zoom-in';
     zoomInBtn.addEventListener('click', () => this.adjustZoom(0.1));
 
-    // Botón reset
+    // Reset button
     const resetBtn = document.createElement('button');
     resetBtn.innerHTML = '↺';
-    resetBtn.title = 'Restablecer vista';
+    resetBtn.title = 'Reset view';
     resetBtn.className = 'org-reset';
     resetBtn.addEventListener('click', () => this.resetView());
 
-    // Añadir botones al contenedor
+    // Add buttons to the container
     zoomControls.appendChild(zoomOutBtn);
     zoomControls.appendChild(resetBtn);
     zoomControls.appendChild(zoomInBtn);
 
-    // Añadir controles al contenedor principal
+    // Add controls to the main container
     controlsContainer.appendChild(zoomControls);
     this.container.appendChild(controlsContainer);
 
-    // Crear botón de pantalla completa (esquina superior izquierda)
+    // Create fullscreen button (top right corner)
     this._createFullscreenButton();
   }
 
   /**
-   * Crea el botón de pantalla completa
+   * Creates the fullscreen button
    * @private
    */
   _createFullscreenButton() {
-    // Crear contenedor para el botón de pantalla completa
+    // Create container for the fullscreen button
     const fullscreenContainer = document.createElement('div');
     fullscreenContainer.className = 'org-fullscreen-control';
     fullscreenContainer.style.position = 'absolute';
@@ -812,11 +812,11 @@ class HTMLOrgChart {
     fullscreenContainer.style.right = '10px';
     fullscreenContainer.style.zIndex = '100';
 
-    // Crear botón de pantalla completa
+    // Create fullscreen button
     const fullscreenBtn = document.createElement('button');
-    fullscreenBtn.title = 'Pantalla completa';
+    fullscreenBtn.title = 'Fullscreen';
     fullscreenBtn.className = 'org-fullscreen-btn';
-    fullscreenBtn.innerHTML = '⛶'; // Símbolo de pantalla completa
+    fullscreenBtn.innerHTML = '⛶'; // Fullscreen symbol
     fullscreenBtn.style.backgroundColor = '#fff';
     fullscreenBtn.style.border = '1px solid #ccc';
     fullscreenBtn.style.borderRadius = '3px';
@@ -824,10 +824,10 @@ class HTMLOrgChart {
     fullscreenBtn.style.cursor = 'pointer';
     fullscreenBtn.style.fontSize = '16px';
 
-    // Variable para rastrear el estado de pantalla completa
+    // Variable to track fullscreen state
     let isFullscreen = false;
 
-    // Guardar las dimensiones originales
+    // Save original dimensions
     const originalStyle = {
       width: this.container.style.width,
       height: this.container.style.height,
@@ -838,16 +838,16 @@ class HTMLOrgChart {
       zIndex: this.container.style.zIndex
     };
 
-    // Función para alternar el modo de pantalla completa
+    // Function to toggle fullscreen mode
     const toggleFullscreen = () => {
       if (!isFullscreen) {
-        // Guardar posición actual de desplazamiento
+        // Save current scroll position
         this._scrollPosition = {
           x: window.scrollX,
           y: window.scrollY
         };
 
-        // Cambiar a pantalla completa
+        // Switch to fullscreen
         Object.assign(this.container.style, {
           position: 'fixed',
           width: '100%',
@@ -860,80 +860,80 @@ class HTMLOrgChart {
           overflow: 'hidden'
         });
 
-        // Prevenir desplazamiento
+        // Prevent scrolling
         document.body.style.overflow = 'hidden';
 
-        // Cambiar icono del botón
-        fullscreenBtn.innerHTML = '⮌'; // Símbolo de salir de pantalla completa
-        fullscreenBtn.title = 'Salir de pantalla completa';
+        // Change button icon
+        fullscreenBtn.innerHTML = '⮌'; // Exit fullscreen symbol
+        fullscreenBtn.title = 'Exit fullscreen';
 
-        // Recentrar el organigrama en el nuevo contenedor
+        // Recenter the organization chart in the new container
         setTimeout(() => this.forceCenterWithScale(this.scale), this.TIMEOUTS.FULLSCREEN_ADJUST);
 
         isFullscreen = true;
       } else {
-        // Restaurar dimensiones originales
+        // Restore original dimensions
         Object.assign(this.container.style, originalStyle);
 
-        // Restaurar desplazamiento
+        // Restore scrolling
         document.body.style.overflow = '';
 
-        // Restaurar posición de desplazamiento
+        // Restore scroll position
         if (this._scrollPosition) {
           window.scrollTo(this._scrollPosition.x, this._scrollPosition.y);
         }
 
-        // Cambiar icono del botón
+        // Change button icon
         fullscreenBtn.innerHTML = '⛶';
-        fullscreenBtn.title = 'Pantalla completa';
+        fullscreenBtn.title = 'Fullscreen';
 
-        // Recentrar el organigrama en el contenedor original
+        // Recenter the organization chart in the original container
         setTimeout(() => this.forceCenterWithScale(this.scale), this.TIMEOUTS.FULLSCREEN_ADJUST);
 
         isFullscreen = false;
       }
 
-      // Manejar redimensionamiento
+      // Handle resize
       this.handleResize();
     };
 
-    // Añadir evento de clic
+    // Add click event
     fullscreenBtn.addEventListener('click', toggleFullscreen);
 
-    // Añadir evento de teclado para salir con Escape
+    // Add keyboard event to exit with Escape
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && isFullscreen) {
         toggleFullscreen();
       }
     });
 
-    // Añadir botón al contenedor
+    // Add button to the container
     fullscreenContainer.appendChild(fullscreenBtn);
     this.container.appendChild(fullscreenContainer);
   }
 
   /**
-   * Configura el zoom y arrastre del organigrama
+   * Sets up zoom and drag controls for the organization chart
    */
   setupZoomControls() {
-    // Inicializar variables para seguimiento de estado
+    // Initialize variables to track state
     this.scale = this.options.initialZoom;
     this.translateX = 0;
     this.translateY = 0;
     let isDragging = false;
     let lastX, lastY;
 
-    // Función para aplicar transformación
+    // Function to apply transformation
     const applyTransform = () => {
       this.chartContainer.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
     };
 
-    // Mantener referencia al contexto para usar en los event listeners
+    // Keep reference to context for use in event listeners
     const self = this;
 
-    // Función para iniciar arrastre
+    // Function to start dragging
     const startDrag = function(e) {
-      // Evitar si es botón derecho o clic en elementos interactivos
+      // Prevent if right button or click on interactive elements
       if (e.button === 2 ||
           e.target.tagName === 'BUTTON' ||
           e.target.closest('.org-toggle-btn, button, select')) {
@@ -943,56 +943,56 @@ class HTMLOrgChart {
       e.preventDefault();
       e.stopPropagation();
 
-      // Guardar posición inicial
+      // Save initial position
       isDragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
 
-      // Cambiar cursor
+      // Change cursor
       document.body.style.cursor = 'grabbing';
       self.chartContainer.classList.add('dragging');
     };
 
-    // Función para manejar arrastre
+    // Function to handle dragging
     const moveDrag = function(e) {
       if (!isDragging) return;
 
       e.preventDefault();
       e.stopPropagation();
 
-      // Calcular el desplazamiento desde la última posición
+      // Calculate displacement from last position
       const deltaX = e.clientX - lastX;
       const deltaY = e.clientY - lastY;
 
-      // Calcular nueva posición
+      // Calculate new position
       let newTranslateX = self.translateX + deltaX;
       let newTranslateY = self.translateY + deltaY;
 
-      // Aplicar restricción para mantener el organigrama visible
-      // Evitar arrastrar demasiado hacia la izquierda o derecha
+      // Apply restriction to keep the organization chart visible
+      // Prevent dragging too far left or right
       if (self.boundaries) {
-        const minX = -self.boundaries.orgWidth + 100;  // Permitir que se oculte parcialmente, pero no totalmente
-        const maxX = self.boundaries.containerWidth - 100;  // Mantener al menos una parte visible
+        const minX = -self.boundaries.orgWidth + 100;  // Allow partial hiding, but not completely
+        const maxX = self.boundaries.containerWidth - 100;  // Keep at least part visible
         newTranslateX = Math.min(maxX, Math.max(minX, newTranslateX));
 
-        const minY = -self.boundaries.orgHeight + 100;  // Permitir que se oculte parcialmente, pero no totalmente
-        const maxY = self.boundaries.containerHeight - 100;  // Mantener al menos una parte visible
+        const minY = -self.boundaries.orgHeight + 100;  // Allow partial hiding, but not completely
+        const maxY = self.boundaries.containerHeight - 100;  // Keep at least part visible
         newTranslateY = Math.min(maxY, Math.max(minY, newTranslateY));
       }
 
-      // Actualizar posición
+      // Update position
       self.translateX = newTranslateX;
       self.translateY = newTranslateY;
 
-      // Guardar la nueva posición como última conocida
+      // Save new position as last known
       lastX = e.clientX;
       lastY = e.clientY;
 
-      // Aplicar transformación
+      // Apply transformation
       applyTransform();
     };
 
-    // Función para finalizar arrastre
+    // Function to end dragging
     const endDrag = function() {
       if (!isDragging) return;
 
@@ -1001,15 +1001,15 @@ class HTMLOrgChart {
       self.chartContainer.classList.remove('dragging');
     };
 
-    // Registrar eventos de mouse
+    // Register mouse events
     this.chartContainer.addEventListener('mousedown', startDrag);
     window.addEventListener('mousemove', moveDrag);
     window.addEventListener('mouseup', endDrag);
     window.addEventListener('mouseleave', endDrag);
 
-    // ===== MANEJO DE EVENTOS TÁCTILES =====
+    // ===== TOUCH EVENT HANDLING =====
 
-    // Función para iniciar arrastre táctil
+    // Function to start touch dragging
     const startTouchDrag = function(e) {
       if (e.touches.length !== 1 ||
           e.target.tagName === 'BUTTON' ||
@@ -1019,7 +1019,7 @@ class HTMLOrgChart {
 
       e.preventDefault();
 
-      // Guardar posición inicial
+      // Save initial position
       isDragging = true;
       lastX = e.touches[0].clientX;
       lastY = e.touches[0].clientY;
@@ -1027,29 +1027,29 @@ class HTMLOrgChart {
       self.chartContainer.classList.add('dragging');
     };
 
-    // Función para manejar arrastre táctil
+    // Function to handle touch dragging
     const moveTouchDrag = function(e) {
       if (!isDragging || e.touches.length !== 1) return;
 
       e.preventDefault();
 
-      // Calcular el desplazamiento
+      // Calculate displacement
       const deltaX = e.touches[0].clientX - lastX;
       const deltaY = e.touches[0].clientY - lastY;
 
-      // Actualizar posición considerando la escala actual
+      // Update position considering current scale
       self.translateX += deltaX;
       self.translateY += deltaY;
 
-      // Guardar la nueva posición
+      // Save new position
       lastX = e.touches[0].clientX;
       lastY = e.touches[0].clientY;
 
-      // Aplicar transformación
+      // Apply transformation
       applyTransform();
     };
 
-    // Función para finalizar arrastre táctil
+    // Function to end touch dragging
     const endTouchDrag = function() {
       if (!isDragging) return;
 
@@ -1057,73 +1057,73 @@ class HTMLOrgChart {
       self.chartContainer.classList.remove('dragging');
     };
 
-    // Registrar eventos táctiles
+    // Register touch events
     this.chartContainer.addEventListener('touchstart', startTouchDrag, { passive: false });
     window.addEventListener('touchmove', moveTouchDrag, { passive: false });
     window.addEventListener('touchend', endTouchDrag);
     window.addEventListener('touchcancel', endTouchDrag);
 
-    // ===== MANEJO DE ZOOM CON RUEDA DEL RATÓN =====
+    // ===== WHEEL ZOOM HANDLING =====
 
-    // Función para manejar zoom con la rueda
+    // Function to handle zoom with the wheel
     const handleWheel = function(e) {
       e.preventDefault();
 
-      // Determinar dirección del zoom
+      // Determine zoom direction
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
 
-      // Obtener posición del ratón relativa al contenedor
+      // Get mouse position relative to the container
       const rect = self.chartContainer.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
 
-      // Calcular posición del ratón en el espacio del chart (sin escalar)
+      // Calculate mouse position in the chart space (unscaled)
       const mouseChartX = (mouseX - self.translateX) / self.scale;
       const mouseChartY = (mouseY - self.translateY) / self.scale;
 
-      // Calcular nueva escala con límites
+      // Calculate new scale with limits
       const newScale = Math.max(0.1, Math.min(3, self.scale + delta));
 
-      // Actualizar escala
+      // Update scale
       self.scale = newScale;
 
-      // Ajustar translación para mantener el punto bajo el cursor
+      // Adjust translation to keep the point under the cursor
       self.translateX = mouseX - mouseChartX * newScale;
       self.translateY = mouseY - mouseChartY * newScale;
 
-      // Aplicar transformación
+      // Apply transformation
       applyTransform();
 
-      // Recalcular las líneas de conexión después de aplicar zoom
-      // Usar debounce para mejorar rendimiento
+      // Recalculate connection lines after applying zoom
+      // Use debounce to improve performance
       clearTimeout(self.wheelZoomTimeout);
       self.wheelZoomTimeout = setTimeout(() => {
         self.redrawAllConnectors();
       }, self.TIMEOUTS.WHEEL_ZOOM_DEBOUNCE);
     };
 
-    // Registrar evento de rueda
+    // Register wheel event
     this.container.addEventListener('wheel', handleWheel, { passive: false });
 
-    // Añadir tabIndex para que el contenedor pueda recibir foco
+    // Add tabIndex to allow the container to receive focus
     this.chartContainer.tabIndex = 0;
 
-    // Ya no usamos el setTimeout aquí, porque ahora llamamos a centerChartWithZoom
-    // desde initialize() con un retraso más largo para asegurar que todo esté listo
+    // No longer using setTimeout here, because now we call centerChartWithZoom
+    // from initialize() with a longer delay to ensure everything is ready
   }
 
   /**
-   * Centra el organigrama en el contenedor
+   * Centers the organization chart in the container
    */
   centerChart() {
     this.forceCenterWithScale(this.scale);
   }
 
   /**
-   * Función ayudante para garantizar que el gráfico sea visible
+   * Helper function to ensure the chart is visible
    */
   ensureChartIsVisible() {
-    // Similar a centerChart pero garantiza que al menos parte del gráfico sea visible
+    // Similar to centerChart but ensures at least part of the chart is visible
     if (!this.chartContainer || !this.container) return;
 
     const containerRect = this.container.getBoundingClientRect();
@@ -1133,7 +1133,7 @@ class HTMLOrgChart {
 
     const actualRect = organigramaElem.getBoundingClientRect();
 
-    // Si está completamente fuera de la vista, centrarlo
+    // If it's completely out of view, center it
     if (actualRect.right < 0 || actualRect.left > containerRect.width ||
         actualRect.bottom < 0 || actualRect.top > containerRect.height) {
       this.forceCenterWithScale(this.scale);
@@ -1141,111 +1141,111 @@ class HTMLOrgChart {
   }
 
   /**
-   * Ajusta el nivel de zoom
-   * @param {number} delta - Cambio en el nivel de zoom
+   * Adjusts the zoom level
+   * @param {number} delta - Change in zoom level
    */
   adjustZoom(delta) {
     if (!this.chartContainer) return;
 
-    // Obtener dimensiones
+    // Get dimensions
     const containerRect = this.container.getBoundingClientRect();
     const centerX = containerRect.width / 2;
     const centerY = containerRect.height / 2;
 
-    // Calcular posición del centro en el espacio del chart sin escalar
+    // Calculate center position in the chart space unscaled
     const centerChartX = (centerX - this.translateX) / this.scale;
     const centerChartY = (centerY - this.translateY) / this.scale;
 
-    // Calcular nueva escala
+    // Calculate new scale
     const newScale = Math.max(0.1, Math.min(3, this.scale + delta));
 
-    // Actualizar escala
+    // Update scale
     this.scale = newScale;
 
-    // Ajustar translación para mantener el punto central
+    // Adjust translation to keep the central point
     this.translateX = centerX - centerChartX * newScale;
     this.translateY = centerY - centerChartY * newScale;
 
-    // Aplicar transformación
+    // Apply transformation
     this.chartContainer.style.transform =
       `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
 
-    // Recalcular las líneas de conexión
-    setTimeout(() => this.redrawAllConnectors(), 100); // Usar redrawAllConnectors
+    // Recalculate connection lines
+    setTimeout(() => this.redrawAllConnectors(), 100); // Use redrawAllConnectors
   }
 
   /**
-   * Restablece la vista al estado inicial
+   * Resets the view to the initial state
    */
   resetView() {
-    // Forzar el centrado con la escala inicial
+    // Force centering with the initial scale
     this.forceCenterWithScale(this.options.initialZoom);
 
-    // No es necesario redibujado adicional aquí ya que forceCenterWithScale ya lo hace
+    // No additional redraw needed here as forceCenterWithScale already does it
   }
 
   /**
-   * Ajusta automáticamente el nivel de zoom para mostrar todo el organigrama
-   * con un margen razonable
+   * Automatically adjusts the zoom level to show the entire organization chart
+   * with a reasonable margin
    */
   autoAdjustZoom() {
     if (!this.chartContainer || !this.container) return;
 
-    // Obtener dimensiones del contenedor
+    // Get container dimensions
     const containerRect = this.container.getBoundingClientRect();
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
 
-    // Obtener dimensiones del organigrama
+    // Get organization chart dimensions
     const organigramaElem = this.chartContainer.querySelector('.organigrama');
     if (!organigramaElem) return;
     const organigramaRect = organigramaElem.getBoundingClientRect();
 
-    // Calcular el tamaño real sin escala
+    // Calculate actual size unscaled
     const realWidth = organigramaRect.width / this.scale;
     const realHeight = organigramaRect.height / this.scale;
 
-    // Calcular ratios de zoom necesarios para ajustar horizontal y verticalmente
-    const horizontalZoom = (containerWidth - 40) / realWidth; // 40px de margen
-    const verticalZoom = (containerHeight - 40) / realHeight; // 40px de margen
+    // Calculate zoom ratios needed to fit horizontally and vertically
+    const horizontalZoom = (containerWidth - 40) / realWidth; // 40px margin
+    const verticalZoom = (containerHeight - 40) / realHeight; // 40px margin
 
-    // Usar el zoom más restrictivo (el menor) para asegurar que todo sea visible
+    // Use the most restrictive zoom (the smallest) to ensure everything is visible
     let newZoom = Math.min(horizontalZoom, verticalZoom);
 
-    // Limitar el zoom a un rango razonable
+    // Limit zoom to a reasonable range
     newZoom = Math.max(0.2, Math.min(newZoom, 1.5));
 
-    // Aplicar el nuevo zoom solo si es significativamente diferente al actual
+    // Apply the new zoom only if significantly different from the current one
     if (Math.abs(newZoom - this.scale) > 0.05) {
-      // Calcular centro del organigrama
+      // Calculate center of the organization chart
       const orgCenterX = (organigramaRect.left + organigramaRect.right) / 2;
       const orgCenterY = (organigramaRect.top + organigramaRect.bottom) / 2;
 
-      // Calcular centro del contenedor
+      // Calculate center of the container
       const containerCenterX = containerRect.left + containerWidth / 2;
       const containerCenterY = containerRect.top + containerHeight / 2;
 
-      // Calcular desplazamiento necesario para centrar
+      // Calculate displacement needed to center
       const deltaX = containerCenterX - orgCenterX;
       const deltaY = containerCenterY - orgCenterY;
 
-      // Actualizar escala y posición
+      // Update scale and position
       this.scale = newZoom;
 
-      // Calcular nueva traducción para centrar el contenido
+      // Calculate new translation to center the content
       this.translateX = deltaX + (this.translateX * newZoom / this.scale);
       this.translateY = deltaY + (this.translateY * newZoom / this.scale);
 
-      // Aplicar la transformación
+      // Apply the transformation
       this.chartContainer.style.transform =
         `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
     }
   }
 
   /**
-   * Actualiza el organigrama con nuevos datos
-   * @param {Object} newData - Nuevos datos para el organigrama
-   * @param {Object} [options] - Opciones adicionales
+   * Updates the organization chart with new data
+   * @param {Object} newData - New data for the organization chart
+   * @param {Object} [options] - Additional options
    */
   update(newData, options = null) {
     if (options) {
@@ -1257,46 +1257,46 @@ class HTMLOrgChart {
     this.expandedNodes = new Map();
     this.initialize();
 
-    // Ajustar zoom automáticamente para mostrar todo el contenido
+    // Automatically adjust zoom to show all content
     setTimeout(() => this.autoAdjustZoom(), this.TIMEOUTS.AUTO_ZOOM_ADJUST);
   }
 /**
- * Redibuja todos los conectores del organigrama teniendo en cuenta la escala
+ * Redraws all connectors in the organization chart considering the scale
  */
 redrawAllConnectors() {
   try {
-    // 1. Eliminar todos los conectores existentes para empezar limpio
+    // 1. Remove all existing connectors to start clean
     document.querySelectorAll('.connector-line, .vert-connector, .parent-connector').forEach(conn => {
       conn.remove();
     });
 
-    // 2. Procesar todos los nodos con hijos expuestos
+    // 2. Process all nodes with exposed children
     const allExpandedParents = Array.from(document.querySelectorAll('.organigrama .hierarchy.isOpen'));
 
     allExpandedParents.forEach(parentNode => {
-      // Crear conector vertical para el padre
+      // Create vertical connector for the parent
       this._createParentConnector(parentNode);
 
-      // Obtener lista de hijos
+      // Get list of children
       const childrenList = parentNode.querySelector('ul.nodes');
       if (!childrenList || childrenList.classList.contains('hidden')) return;
 
       const children = Array.from(childrenList.querySelectorAll(':scope > li'));
 
-      // Crear conectores verticales para cada hijo
+      // Create vertical connectors for each child
       children.forEach(childNode => {
         this._createChildConnector(childNode);
       });
 
-      // Si hay múltiples hijos, crear conector horizontal
+      // If there are multiple children, create horizontal connector
       if (children.length >= 2) {
         this._createHorizontalConnector(childrenList, children);
       }
     });
 
-    // 3. Crear conectores verticales para los demás nodos hijos que necesiten conectores
-    // Pero ahora con la verificación mejorada en _createChildConnector, solo se crearán
-    // donde sean necesarios
+    // 3. Create vertical connectors for other child nodes that need connectors
+    // But now with the improved check in _createChildConnector, they will only be created
+    // where needed
     const allChildNodes = Array.from(document.querySelectorAll('.organigrama ul.nodes > li'));
     allChildNodes.forEach(node => {
       if (!node.querySelector('.vert-connector')) {
@@ -1304,29 +1304,29 @@ redrawAllConnectors() {
       }
     });
 
-    // 4. Verificar si solo hay un nodo visible y centrarlo en ese caso
+    // 4. Check if there is only one visible node and center it in that case
     this._centerSingleVisibleNode();
 
   } catch (error) {
-    console.error("Error en redrawAllConnectors:", error);
+    console.error("Error in redrawAllConnectors:", error);
   }
 }
 
 /**
- * Verifica si solo hay un nodo visible en el organigrama y lo centra
+ * Checks if there is only one node visible in the organization chart and centers it
  * @private
  */
 _centerSingleVisibleNode() {
   if (!this.chartContainer || !this.container) return;
 
-  // Contar nodos visibles (no ocultos)
+  // Count visible nodes (not hidden)
   const visibleNodes = Array.from(
     this.chartContainer.querySelectorAll('.node')
   ).filter(node => {
-    // Un nodo es visible si él mismo y todos sus ancestros están visibles
+    // A node is visible if itself and all its ancestors are visible
     let current = node;
     while (current && current !== this.chartContainer) {
-      // Si este elemento o cualquiera de sus padres está oculto, el nodo no es visible
+      // If this element or any of its parents is hidden, the node is not visible
       if (current.classList.contains('hidden') ||
           window.getComputedStyle(current).display === 'none') {
         return false;
@@ -1336,40 +1336,40 @@ _centerSingleVisibleNode() {
     return true;
   });
 
-  // Si solo hay un nodo visible, centrarlo
+  // If there's only one visible node, center it
   if (visibleNodes.length === 1) {
     const singleNode = visibleNodes[0];
 
-    // Obtener las dimensiones del contenedor y el nodo
+    // Get dimensions of container and node
     const containerRect = this.container.getBoundingClientRect();
     const nodeRect = singleNode.getBoundingClientRect();
 
-    // Calcular la posición central
+    // Calculate central position
     const containerCenterX = containerRect.width / 2;
     const containerCenterY = containerRect.height / 2;
 
-    // Calcular la posición actual del nodo (teniendo en cuenta la escala)
+    // Calculate current node position (considering scale)
     const nodeCenterX = nodeRect.left + nodeRect.width / 2 - containerRect.left;
     const nodeCenterY = nodeRect.top + nodeRect.height / 2 - containerRect.top;
 
-    // Calcular el desplazamiento necesario para centrar
+    // Calculate displacement needed to center
     const deltaX = containerCenterX - nodeCenterX;
     const deltaY = containerCenterY - nodeCenterY;
 
-    // Si el nodo está significativamente descentrado, aplicar centrado suave
+    // If the node is significantly off-center, apply smooth centering
     if (Math.abs(deltaX) > 20 || Math.abs(deltaY) > 20) {
-      // Usando una transición suave para el centrado
+      // Using smooth transition for centering
       this.chartContainer.style.transition = 'transform 0.3s ease-out';
 
-      // Actualizar la posición manteniendo la escala
+      // Update position maintaining scale
       this.translateX += deltaX;
       this.translateY += deltaY;
 
-      // Aplicar la transformación
+      // Apply transformation
       this.chartContainer.style.transform =
         `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
 
-      // Eliminar la transición después de que se complete
+      // Remove transition after completion
       setTimeout(() => {
         this.chartContainer.style.transition = '';
       }, 300);
@@ -1378,8 +1378,8 @@ _centerSingleVisibleNode() {
 }
 
 /**
- * Crea un conector vertical para un nodo hijo
- * @param {HTMLElement} childNode - Nodo hijo
+ * Creates a vertical connector for a child node
+ * @param {HTMLElement} childNode - Child node
  * @private
  */
 _createChildConnector(childNode) {
@@ -1387,20 +1387,20 @@ _createChildConnector(childNode) {
     const nodeDiv = childNode.querySelector('.node');
     if (!nodeDiv) return;
 
-    // Verificar si este nodo realmente necesita un conector vertical
-    // Un nodo no necesita conector si está en una lista sin un nodo padre visible
+    // Check if this node really needs a vertical connector
+    // A node doesn't need a connector if it's in a list without a visible parent node
     const parentList = childNode.closest('ul.nodes');
     if (!parentList) return;
 
-    // Si el nodo padre no está expandido o no existe, no mostrar el conector vertical
+    // If the parent node is not expanded or doesn't exist, don't show the vertical connector
     const parentHierarchy = parentList.closest('.hierarchy');
     const isParentVisible = parentHierarchy &&
                             !parentHierarchy.classList.contains('hidden') &&
                             parentHierarchy.classList.contains('isOpen');
 
-    // Para nodos raíz o cuando el padre no es visible, no mostrar el conector
+    // For root nodes or when the parent is not visible, don't show the connector
     if (!parentHierarchy || !isParentVisible) {
-      // Si el nodo pertenece a la lista de nodos raíz, no crear el conector
+      // If the node belongs to the root nodes list, don't create the connector
       const isRootNode = parentList.parentElement ===
                          this.chartContainer.querySelector('.organigrama');
       if (isRootNode) return;
@@ -1409,7 +1409,7 @@ _createChildConnector(childNode) {
     const childConnector = document.createElement('div');
     childConnector.className = 'vert-connector';
 
-    // Aplicar estilos con CSS en lugar de cálculos en JS
+    // Apply styles with CSS instead of calculations in JS
     Object.assign(childConnector.style, {
       position: 'absolute',
       width: '2px',
@@ -1423,13 +1423,13 @@ _createChildConnector(childNode) {
 
     childNode.prepend(childConnector);
   } catch (error) {
-    console.error("Error creando conector del hijo:", error);
+    console.error("Error creating child connector:", error);
   }
 }
 
 /**
- * Crea un conector vertical para un nodo padre
- * @param {HTMLElement} parentNode - Nodo padre expandido
+ * Creates a vertical connector for a parent node
+ * @param {HTMLElement} parentNode - Expanded parent node
  * @private
  */
 _createParentConnector(parentNode) {
@@ -1442,7 +1442,7 @@ _createParentConnector(parentNode) {
     const parentConnector = document.createElement('div');
     parentConnector.className = 'parent-connector';
 
-    // Aplicar estilos específicos usando CSS para mayor consistencia
+    // Apply specific styles using CSS for better consistency
     Object.assign(parentConnector.style, {
       position: 'absolute',
       width: '2px',
@@ -1456,32 +1456,32 @@ _createParentConnector(parentNode) {
 
     parentNode.appendChild(parentConnector);
 } catch (error) {
-    console.error("Error creando conector del padre:", error);
+    console.error("Error creating parent connector:", error);
   }
 }
 
 /**
- * Crea un conector horizontal entre nodos hermanos
- * @param {HTMLElement} childrenList - Lista contenedor de los hijos
- * @param {Array} children - Array de nodos hijo
+ * Creates a horizontal connector between sibling nodes
+ * @param {HTMLElement} childrenList - Container list of the children
+ * @param {Array} children - Array of child nodes
  * @private
  */
 _createHorizontalConnector(childrenList, children) {
   try {
     if (children.length < 2) return;
 
-    // En lugar de usar getBoundingClientRect(), usamos offsetLeft y offsetWidth
-    // que no se ven afectados por la escala
+    // Instead of using getBoundingClientRect(), use offsetLeft and offsetWidth
+    // which are not affected by scale
     const firstChild = children[0];
     const lastChild = children[children.length - 1];
 
-    // Obtener los nodos para calcular posiciones
+    // Get the nodes to calculate positions
     const firstNodeDiv = firstChild.querySelector('.node');
     const lastNodeDiv = lastChild.querySelector('.node');
 
     if (!firstNodeDiv || !lastNodeDiv) return;
 
-    // Calcular centros en el espacio sin escala
+    // Calculate centers in unscaled space
     const firstChildLeft = firstChild.offsetLeft;
     const lastChildLeft = lastChild.offsetLeft;
     const firstChildWidth = firstChild.offsetWidth;
@@ -1490,16 +1490,16 @@ _createHorizontalConnector(childrenList, children) {
     const firstCenter = firstChildLeft + (firstChildWidth / 2);
     const lastCenter = lastChildLeft + (lastChildWidth / 2);
 
-    // Crear el conector horizontal
+    // Create the horizontal connector
     const connector = document.createElement('div');
     connector.className = 'connector-line';
 
-    // Calcular posición y ancho
+    // Calculate position and width
     const startPos = Math.min(firstCenter, lastCenter);
     const endPos = Math.max(firstCenter, lastCenter);
     const width = endPos - startPos;
 
-    // Aplicar estilos con posiciones absolutas
+    // Apply styles with absolute positions
     Object.assign(connector.style, {
       position: 'absolute',
       height: '2px',
@@ -1512,22 +1512,22 @@ _createHorizontalConnector(childrenList, children) {
 
     childrenList.prepend(connector);
   } catch (error) {
-    console.error("Error creando conector horizontal:", error);
+    console.error("Error creating horizontal connector:", error);
   }
 }
 
 /**
- * Configura los límites para que el organigrama no pueda ser arrastrado fuera de la vista
+ * Sets up boundaries to prevent the organization chart from being dragged out of view
  */
 setupBoundaries() {
-  // Guardamos las dimensiones para validaciones durante el arrastre
+  // Save dimensions for validations during dragging
   if (!this.chartContainer || !this.container) return;
 
   const containerRect = this.container.getBoundingClientRect();
   const orgChart = this.chartContainer.querySelector('.organigrama');
   if (!orgChart) return;
 
-  // Guardar dimensiones para uso posterior durante el arrastre
+  // Save dimensions for later use during dragging
   this.boundaries = {
     containerWidth: containerRect.width,
     containerHeight: containerRect.height,
@@ -1537,18 +1537,18 @@ setupBoundaries() {
 }
 
 /**
- * Maneja eventos de redimensionamiento de ventana
+ * Handles window resize events
  */
 handleResize() {
-  // Recalcular límites
+  // Recalculate boundaries
   this.setupBoundaries();
 
-  // Centrar con escala actual
+  // Center with current scale
   this.forceCenterWithScale(this.scale);
 }
 }
 
-// Exportar la clase
+// Export the class
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = HTMLOrgChart;
 } else {
