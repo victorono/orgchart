@@ -49,6 +49,7 @@ class HTMLOrgChart {
       showSortControls: false,
       initialZoom: 0.8,
       minHeight: '300px', // Altura mínima predeterminada
+      fullscreenBgColor: '#fff',
     };
 
     // Combinar opciones predeterminadas con las proporcionadas
@@ -806,7 +807,9 @@ class HTMLOrgChart {
           top: '0',
           left: '0',
           margin: '0',
-          zIndex: '9999'
+          zIndex: '9999',
+          backgroundColor: this.options.fullscreenBgColor || '#fff',
+          overflow: 'hidden'
         });
 
         // Prevenir desplazamiento
