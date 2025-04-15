@@ -1,5 +1,9 @@
 /* HTMLOrgChart.css - Estilos para organigrama usando UL/LI */
 
+div#org-chart-container {
+  background-color: #fff;
+}
+
 /* Contenedor principal del organigrama */
 .org-chart-container {
   position: relative;
