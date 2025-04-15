@@ -569,7 +569,8 @@ class HTMLOrgChart {
   toggleNode(nodeId) {
     // Cambiar estado de expansión
     const currentState = this.expandedNodes.get(nodeId);
-    this.expandedNodes.set(nodeId, !currentState);
+    const isExpanding = !currentState; // true si está expandiendo, false si está contrayendo
+    this.expandedNodes.set(nodeId, isExpanding);
 
     // Buscar el elemento del nodo en el DOM
     const nodeElement = document.querySelector(`[id="${nodeId}"]`);
@@ -582,6 +583,12 @@ class HTMLOrgChart {
     // Buscar la lista de hijos
     const childrenList = hierarchyElement.querySelector('ul.nodes');
     if (!childrenList) return;
+
+    // Guardar el tamaño del organigrama antes de cambiar el estado
+    const organigramaElem = this.chartContainer.querySelector('.organigrama');
+    const orgSizeBefore = organigramaElem ?
+      { width: organigramaElem.offsetWidth, height: organigramaElem.offsetHeight } :
+      null;
 
     // Cambiar el estado visual
     if (currentState) { // Estaba expandido, ahora colapsar
@@ -613,9 +620,72 @@ class HTMLOrgChart {
       // Redibujamos todos los conectores
       this.redrawAllConnectors();
 
-      // Asegurarnos que el organigrama siga visible
-      this.ensureChartIsVisible();
+      // Al contraer nodos:
+      // - No recalcular posición para evitar movimientos bruscos
+      // - No hacer centrado automático para evitar saltos
+      if (isExpanding) {
+        // Si estamos expandiendo, puede ser necesario reposicionar
+        // para mostrar el nuevo contenido
+        if (orgSizeBefore && organigramaElem) {
+          const orgSizeAfter = {
+            width: organigramaElem.offsetWidth,
+            height: organigramaElem.offsetHeight
+          };
+
+          // Solo si el tamaño cambió significativamente, ajustamos la vista
+          if (orgSizeAfter.width > orgSizeBefore.width * 1.3 ||
+              orgSizeAfter.height > orgSizeBefore.height * 1.3) {
+            this.ensureChartIsVisible();
+          }
+        }
+      }
     }, 300);
+  }
+
+  /**
+   * Función ayudante para garantizar que el gráfico sea visible
+   * Modificada para ser menos intrusiva cuando se contrae un nodo
+   */
+  ensureChartIsVisible() {
+    if (!this.chartContainer || !this.container) return;
+
+    const containerRect = this.container.getBoundingClientRect();
+    const organigramaElem = this.chartContainer.querySelector('.organigrama');
+    if (!organigramaElem) return;
+
+    const actualRect = organigramaElem.getBoundingClientRect();
+
+    // Si está completamente fuera de la vista o muy cerca del borde, ajustar
+    // pero con un enfoque menos agresivo que simplemente centrar
+    if (actualRect.right < 0 || actualRect.left > containerRect.width ||
+        actualRect.bottom < 0 || actualRect.top > containerRect.height) {
+
+      // En lugar de centrar completamente, solo ajustar lo necesario para
+      // que al menos una parte significativa sea visible
+      let newTranslateX = this.translateX;
+      let newTranslateY = this.translateY;
+
+      // Ajustar horizontalmente si es necesario
+      if (actualRect.right < 50) { // Casi invisible a la izquierda
+        newTranslateX += (50 - actualRect.right);
+      } else if (actualRect.left > containerRect.width - 50) { // Casi invisible a la derecha
+        newTranslateX -= (actualRect.left - (containerRect.width - 50));
+      }
+
+      // Ajustar verticalmente si es necesario
+      if (actualRect.bottom < 50) { // Casi invisible arriba
+        newTranslateY += (50 - actualRect.bottom);
+      } else if (actualRect.top > containerRect.height - 50) { // Casi invisible abajo
+        newTranslateY -= (actualRect.top - (containerRect.height - 50));
+      }
+
+      // Aplicar los ajustes solo si realmente cambiaron
+      if (newTranslateX !== this.translateX || newTranslateY !== this.translateY) {
+        this.translateX = newTranslateX;
+        this.translateY = newTranslateY;
+        this.chartContainer.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+      }
+    }
   }
 
   /**
