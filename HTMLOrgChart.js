@@ -217,251 +217,209 @@ class HTMLOrgChart {
   processData() {
     const data = this.data.tree || this.data;
 
-    // Function to process the organization chart data with name and last_name fields
-    function processOrganizationChart(nodes) {
-      console.log(`Processing ${nodes.length} nodes in total`);
+    // Step 1: Group nodes by name to detect possible duplicates
+    const nodesByName = new Map();
+    for (const node of data) {
+      // Create a normalized name for comparison
+      const normalizedName = this.normalizeNodeName(node);
 
-      // 1. Normalize names: create full name for each person consistently
-      nodes.forEach(node => {
-        // Create a normalized full name field combining name and last_name
-        node.fullName = node.last_name ? `${node.name} ${node.last_name}` : node.name;
-      });
+      if (!nodesByName.has(normalizedName)) {
+        nodesByName.set(normalizedName, []);
+      }
+      nodesByName.get(normalizedName).push(node);
+    }
 
-      // 2. Group nodes by title to detect potential duplicates
-      const nodesByTitle = {};
-      nodes.forEach(node => {
-        if (!nodesByTitle[node.title]) {
-          nodesByTitle[node.title] = [];
+    // Step 2: Resolve duplicates and create main map
+    const nodeMap = new Map();
+    const duplicateLog = [];
+    let rootNodeId = null;
+
+    // If we didn't find a Gerente General, try to find the node with most children
+    if (!rootNodeId) {
+      const childCount = new Map();
+
+      // Count how many nodes have each ID as parent
+      for (const node of data) {
+        if (node.pid) {
+          childCount.set(node.pid, (childCount.get(node.pid) || 0) + 1);
         }
-        nodesByTitle[node.title].push(node);
-      });
+      }
 
-      // 3. Find duplicates using advanced name matching
-      const duplicateMapping = {};
+      // Find the ID with most children
+      let maxChildren = 0;
+      for (const [id, count] of childCount.entries()) {
+        if (count > maxChildren) {
+          maxChildren = count;
+          rootNodeId = id;
+        }
+      }
+    }
 
-      Object.entries(nodesByTitle).forEach(([title, titleNodes]) => {
-        // Skip if there's only one node with this title
-        if (titleNodes.length <= 1) return;
+    // Make sure nodes that are clearly duplicates are properly mapped
+    const idMapping = new Map();
 
-        // Group by similarity
-        const groups = [];
+    for (const [normalizedName, nodes] of nodesByName.entries()) {
+      if (nodes.length > 1) {
+        // Prioritize nodes that have a proper pid or are referenced as pid by others
+        let primaryNode = nodes[0];
+        const childRefCount = new Map();
 
-        for (const node of titleNodes) {
-          // Try to find a matching group
-          let foundMatch = false;
-
-          for (const group of groups) {
-            const sampleNode = group[0];
-
-            // Check if names are similar enough
-            if (areSimilarNames(node.fullName, sampleNode.fullName)) {
-              group.push(node);
-              foundMatch = true;
-              break;
-            }
-          }
-
-          // If no match found, create a new group
-          if (!foundMatch) {
-            groups.push([node]);
+        // Count how many nodes have each ID as parent
+        for (const node of data) {
+          if (node.pid) {
+            childRefCount.set(node.pid, (childRefCount.get(node.pid) || 0) + 1);
           }
         }
 
-        // Process groups with multiple nodes (duplicates)
-        groups.filter(group => group.length > 1).forEach(duplicates => {
-          // Prefer nodes with pid (that have a parent)
-          let primaryNode = duplicates[0];
+        // Find node with most direct reports or with relationship to the root
+        for (const node of nodes) {
+          const childCount = childRefCount.get(node.id) || 0;
+          const primaryChildCount = childRefCount.get(primaryNode.id) || 0;
 
-          for (const node of duplicates) {
-            if (node.pid && (!primaryNode.pid || node.pid === 24332)) { // Prefer nodes reporting to 24332 if possible
-              primaryNode = node;
-            }
+          // Prefer nodes that have children or have a connection to root
+          if (childCount > primaryChildCount ||
+              (node.pid === rootNodeId && primaryNode.pid !== rootNodeId)) {
+            primaryNode = node;
           }
+        }
 
-          // Add to duplicate mapping
-          duplicates.forEach(node => {
-            if (node.id !== primaryNode.id) {
-              duplicateMapping[node.id] = primaryNode.id;
-            }
-          });
+        // Log resolved duplicates for reference
+        duplicateLog.push({
+          name: normalizedName,
+          selectedId: primaryNode.id,
+          allIds: nodes.map(n => n.id)
         });
-      });
 
-      console.log(`Found ${Object.keys(duplicateMapping).length} duplicate IDs`);
+        // Create mappings for duplicate IDs
+        for (const node of nodes) {
+          if (node.id !== primaryNode.id) {
+            idMapping.set(node.id, primaryNode.id);
+          }
+        }
 
-      // 4. Build a clean map of nodes
-      const nodeMap = {};
-      nodes.forEach(node => {
-        // Skip if it's a duplicate
-        if (duplicateMapping[node.id]) return;
-
-        // Add node to the map
-        nodeMap[node.id] = {
+        // Only add the primary node to the map
+        nodeMap.set(primaryNode.id, {
+          ...primaryNode,
+          children: [],
+          level: 0,
+          // Ensure the node has a proper fullName property
+          fullName: this.normalizeNodeName(primaryNode)
+        });
+      } else {
+        // No duplicates, add normally
+        const node = nodes[0];
+        nodeMap.set(node.id, {
           ...node,
           children: [],
-          level: null // Will be set later
-        };
-      });
-
-      // 5. Build the hierarchy
-      const idsProcessed = new Set();
-      const rootNodes = [];
-
-      // First, identify the root nodes (nodes without parents or with non-existent parents)
-      nodes.forEach(node => {
-        // Skip if it's a duplicate
-        if (duplicateMapping[node.id]) return;
-
-        // Check if it's a root node
-        if (!node.pid || !nodeMap[duplicateMapping[node.pid] || node.pid]) {
-          const nodeToAdd = nodeMap[node.id];
-          if (nodeToAdd) {
-            rootNodes.push(nodeToAdd);
-            idsProcessed.add(node.id);
-          }
-        }
-      });
-
-      // Process parent-child relationships
-      nodes.forEach(node => {
-        // Skip if already processed or is a duplicate
-        if (idsProcessed.has(node.id) || duplicateMapping[node.id]) return;
-
-        if (node.pid) {
-          // Resolve the pid if it points to a duplicate
-          const resolvePid = duplicateMapping[node.pid] || node.pid;
-
-          // If the parent exists in our clean map
-          if (nodeMap[resolvePid]) {
-            // Add this node as a child of the parent
-            const nodeToAdd = nodeMap[node.id];
-            if (nodeToAdd) {
-              nodeMap[resolvePid].children.push(nodeToAdd);
-              idsProcessed.add(node.id);
-            }
-          } else {
-            // Parent doesn't exist or was eliminated for being a duplicate
-            // Add this node as a root
-            const nodeToAdd = nodeMap[node.id];
-            if (nodeToAdd) {
-              rootNodes.push(nodeToAdd);
-              idsProcessed.add(node.id);
-            }
-          }
-        }
-      });
-
-      // 6. Assign levels correctly using BFS (avoids deep recursion)
-      const queue = [...rootNodes.map(node => ({node, level: 0}))];
-      while (queue.length > 0) {
-        const {node, level} = queue.shift();
-
-        // Assign level
-        node.level = level;
-
-        // Add children to the queue
-        if (node.children && node.children.length > 0) {
-          node.children.forEach(child => {
-            queue.push({node: child, level: level + 1});
-          });
-        }
+          level: 0,
+          fullName: this.normalizeNodeName(node)
+        });
       }
-
-      // 7. Sort alphabetically without deep recursion
-      function sortNodesIterative(nodesToSort) {
-        const stack = [nodesToSort];
-
-        while (stack.length > 0) {
-          const currentNodes = stack.pop();
-
-          // Sort the current level
-          currentNodes.sort((a, b) => {
-            if (!a.fullName || !b.fullName) return 0;
-            return a.fullName.localeCompare(b.fullName);
-          });
-
-          // Add children to the stack
-          for (const node of currentNodes) {
-            if (node.children && node.children.length > 0) {
-              stack.push(node.children);
-            }
-          }
-        }
-      }
-
-      // Sort the nodes
-      sortNodesIterative(rootNodes);
-
-      return rootNodes;
     }
 
-    // Helper function to check if two names are similar
-    function areSimilarNames(name1, name2) {
-      if (!name1 || !name2) return false;
+    // Step 3: Build the hierarchy based on the clean map
+    const rootNodes = [];
 
-      // Convert to uppercase and remove accents for better comparison
-      const normalize = (str) => str.toUpperCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, " ").trim();
+    // Function to resolve a potentially mapped ID
+    const resolveId = (id) => idMapping.get(id) || id;
 
-      const n1 = normalize(name1);
-      const n2 = normalize(name2);
+    // Traverse nodes to establish parent-child relationships
+    for (const [id, node] of nodeMap.entries()) {
+      if (node.pid) {
+        // Resolve the mapped ID if needed
+        const resolvedPid = resolveId(node.pid);
 
-      // If exact match after normalization
-      if (n1 === n2) return true;
+        // Check if this parent exists in our map
+        if (nodeMap.has(resolvedPid)) {
+          // It's a child node
+          const parentNode = nodeMap.get(resolvedPid);
+          node.level = parentNode.level + 1;
+          parentNode.children.push(node);
+        } else {
+          // Parent doesn't exist, treat as root
+          node.level = 0;
+          rootNodes.push(node);
+        }
+      } else {
+        // It's a root node
+        node.level = 0;
+        rootNodes.push(node);
+      }
+    }
 
-      // If one is contained within the other
-      if (n1.includes(n2) || n2.includes(n1)) return true;
+    // Sort nodes by title or name
+    this.sortNodes(rootNodes);
 
-      // Split into parts and check for overlapping words
-      const parts1 = n1.split(/\s+/);
-      const parts2 = n2.split(/\s+/);
+    // If we don't have any root nodes but have nodes in the map,
+    // there might be a circular reference or orphaned nodes
+    if (rootNodes.length === 0 && nodeMap.size > 0) {
+      // Pick the node with the most children as root
+      let bestRoot = null;
+      let mostChildren = -1;
 
-      // Count matching words
-      let matches = 0;
-      for (const part1 of parts1) {
-        if (part1.length < 3) continue; // Skip very short words
-        if (parts2.some(part2 => part2.length >= 3 && (part1.includes(part2) || part2.includes(part1)))) {
-          matches++;
+      for (const node of nodeMap.values()) {
+        if (node.children.length > mostChildren) {
+          mostChildren = node.children.length;
+          bestRoot = node;
         }
       }
 
-      // If at least 2 words match, consider it similar
-      return matches >= 2;
-    }
+      // If we found something, use it as root
+      if (bestRoot) {
+        // Remove from parent's children if applicable
+        if (bestRoot.pid && nodeMap.has(bestRoot.pid)) {
+          const parent = nodeMap.get(bestRoot.pid);
+          parent.children = parent.children.filter(child => child.id !== bestRoot.id);
+        }
 
-    // Process the organization chart
-    try {
-      // Handle empty data
-      if (!data || data.length === 0) {
-        console.warn("No data to process");
-        this.hierarchicalData = [];
-        return [];
-      }
-
-      const rootNodes = processOrganizationChart(data);
-
-      // Store the result for later use
-      this.hierarchicalData = rootNodes;
-
-      // Configure initial expansion if available
-      if (typeof this.configureInitialExpansion === 'function') {
-        try {
-          this.configureInitialExpansion();
-        } catch (e) {
-          console.error("Error configuring initial expansion:", e);
+        // Reset level and add to root nodes
+        bestRoot.level = 0;
+        bestRoot.pid = null;
+        rootNodes.push(bestRoot);
+      } else {
+        // Last resort: add the first node we can find
+        const firstNode = Array.from(nodeMap.values())[0];
+        if (firstNode) {
+          firstNode.level = 0;
+          firstNode.pid = null;
+          rootNodes.push(firstNode);
         }
       }
-
-      return rootNodes;
-    } catch (error) {
-      console.error("Error processing organization chart:", error);
-
-      // In case of error, return an empty array as fallback
-      this.hierarchicalData = [];
-      return [];
     }
+
+    // Store processed data
+    this.hierarchicalData = rootNodes;
+
+    // Configure initial expansion
+    this.configureInitialExpansion();
+
+    return rootNodes;
   }
+
+  /**
+   * Normalize a node name for comparison and display
+   * @param {Object} node - The node to normalize
+   * @returns {string} - Normalized name
+   */
+  normalizeNodeName(node) {
+    if (!node) return '';
+
+    // If the node already has a fullName property, use that
+    if (node.fullName) return node.fullName;
+
+    // If the node has separate name and last_name fields
+    if (node.name && node.last_name) {
+      return `${node.name} ${node.last_name}`.toUpperCase().trim();
+    }
+
+    // If the node just has a name
+    if (node.name) {
+      return node.name.toUpperCase().trim();
+    }
+
+    return '';
+  }
+
   /**
    * Configure initial expansion state of nodes based on hierarchical level
    */
