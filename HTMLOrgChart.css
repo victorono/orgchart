@@ -160,12 +160,22 @@ div#org-chart-container {
   font-weight: bold;
 }
 
-/* Name styles */
+/* Name styles and surname */
+
 .organigrama .c-name {
+  margin-top: 10px;
+  margin-bottom: 2px;
+}
+.organigrama .c-surname {
+  margin-top: 2px;
+  margin-bottom: 5px;
+}
+
+.organigrama .c-name,
+.organigrama .c-surname {
   font-weight: 600;
   font-size: 14px;
   color: #111827;
-  margin: 10px 0 5px;
   max-width: var(--max-with);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -179,7 +189,7 @@ div#org-chart-container {
 
 /* Job title styles */
 .organigrama .c-job {
-  font-size: 12px;
+  font-size: 14px;
   color: #6b7280;
   margin: 5px 0;
   max-width: var(--max-with);

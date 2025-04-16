@@ -217,48 +217,79 @@ class HTMLOrgChart {
   processData() {
     const data = this.data.tree || this.data;
 
-    // Function to process the organization chart data
+    // Function to process the organization chart data with name and last_name fields
     function processOrganizationChart(nodes) {
-      // console.log(`Processing ${nodes.length} nodes in total`);
+      console.log(`Processing ${nodes.length} nodes in total`);
 
-      // 1. Identify duplicates by name+title
-      const duplicatesByKey = {};
+      // 1. Normalize names: create full name for each person consistently
       nodes.forEach(node => {
-        const key = `${node.name}|${node.title}`;
-        if (!duplicatesByKey[key]) {
-          duplicatesByKey[key] = [];
-        }
-        duplicatesByKey[key].push(node);
+        // Create a normalized full name field combining name and last_name
+        node.fullName = node.last_name ? `${node.name} ${node.last_name}` : node.name;
       });
 
-      // Filter only real duplicates (more than 1 node)
-      const duplicates = Object.entries(duplicatesByKey)
-        .filter(([key, nodes]) => nodes.length > 1);
+      // 2. Group nodes by title to detect potential duplicates
+      const nodesByTitle = {};
+      nodes.forEach(node => {
+        if (!nodesByTitle[node.title]) {
+          nodesByTitle[node.title] = [];
+        }
+        nodesByTitle[node.title].push(node);
+      });
 
-      // console.log(`Found ${duplicates.length} duplicate name/title combinations`);
-
-      // 2. Create a mapping table to resolve duplicates
-      // Prefer nodes with pid (that have a parent)
+      // 3. Find duplicates using advanced name matching
       const duplicateMapping = {};
-      duplicates.forEach(([key, dupes]) => {
-        // By default, choose the first one
-        let primaryNode = dupes[0];
 
-        // First look for nodes with pid
-        const nodeWithPid = dupes.find(node => node.pid);
-        if (nodeWithPid) {
-          primaryNode = nodeWithPid;
+      Object.entries(nodesByTitle).forEach(([title, titleNodes]) => {
+        // Skip if there's only one node with this title
+        if (titleNodes.length <= 1) return;
+
+        // Group by similarity
+        const groups = [];
+
+        for (const node of titleNodes) {
+          // Try to find a matching group
+          let foundMatch = false;
+
+          for (const group of groups) {
+            const sampleNode = group[0];
+
+            // Check if names are similar enough
+            if (areSimilarNames(node.fullName, sampleNode.fullName)) {
+              group.push(node);
+              foundMatch = true;
+              break;
+            }
+          }
+
+          // If no match found, create a new group
+          if (!foundMatch) {
+            groups.push([node]);
+          }
         }
 
-        // Record all duplicate IDs and which one is primary
-        dupes.forEach(node => {
-          if (node.id !== primaryNode.id) {
-            duplicateMapping[node.id] = primaryNode.id;
+        // Process groups with multiple nodes (duplicates)
+        groups.filter(group => group.length > 1).forEach(duplicates => {
+          // Prefer nodes with pid (that have a parent)
+          let primaryNode = duplicates[0];
+
+          for (const node of duplicates) {
+            if (node.pid && (!primaryNode.pid || node.pid === 24332)) { // Prefer nodes reporting to 24332 if possible
+              primaryNode = node;
+            }
           }
+
+          // Add to duplicate mapping
+          duplicates.forEach(node => {
+            if (node.id !== primaryNode.id) {
+              duplicateMapping[node.id] = primaryNode.id;
+            }
+          });
         });
       });
 
-      // 3. Build a clean map of nodes
+      console.log(`Found ${Object.keys(duplicateMapping).length} duplicate IDs`);
+
+      // 4. Build a clean map of nodes
       const nodeMap = {};
       nodes.forEach(node => {
         // Skip if it's a duplicate
@@ -272,7 +303,7 @@ class HTMLOrgChart {
         };
       });
 
-      // 4. Build the hierarchy
+      // 5. Build the hierarchy
       const idsProcessed = new Set();
       const rootNodes = [];
 
@@ -320,7 +351,7 @@ class HTMLOrgChart {
         }
       });
 
-      // 5. Assign levels correctly using BFS (avoids deep recursion)
+      // 6. Assign levels correctly using BFS (avoids deep recursion)
       const queue = [...rootNodes.map(node => ({node, level: 0}))];
       while (queue.length > 0) {
         const {node, level} = queue.shift();
@@ -336,7 +367,7 @@ class HTMLOrgChart {
         }
       }
 
-      // 6. Sort alphabetically without deep recursion
+      // 7. Sort alphabetically without deep recursion
       function sortNodesIterative(nodesToSort) {
         const stack = [nodesToSort];
 
@@ -345,8 +376,8 @@ class HTMLOrgChart {
 
           // Sort the current level
           currentNodes.sort((a, b) => {
-            if (!a.name || !b.name) return 0;
-            return a.name.localeCompare(b.name);
+            if (!a.fullName || !b.fullName) return 0;
+            return a.fullName.localeCompare(b.fullName);
           });
 
           // Add children to the stack
@@ -362,6 +393,41 @@ class HTMLOrgChart {
       sortNodesIterative(rootNodes);
 
       return rootNodes;
+    }
+
+    // Helper function to check if two names are similar
+    function areSimilarNames(name1, name2) {
+      if (!name1 || !name2) return false;
+
+      // Convert to uppercase and remove accents for better comparison
+      const normalize = (str) => str.toUpperCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ").trim();
+
+      const n1 = normalize(name1);
+      const n2 = normalize(name2);
+
+      // If exact match after normalization
+      if (n1 === n2) return true;
+
+      // If one is contained within the other
+      if (n1.includes(n2) || n2.includes(n1)) return true;
+
+      // Split into parts and check for overlapping words
+      const parts1 = n1.split(/\s+/);
+      const parts2 = n2.split(/\s+/);
+
+      // Count matching words
+      let matches = 0;
+      for (const part1 of parts1) {
+        if (part1.length < 3) continue; // Skip very short words
+        if (parts2.some(part2 => part2.length >= 3 && (part1.includes(part2) || part2.includes(part1)))) {
+          matches++;
+        }
+      }
+
+      // If at least 2 words match, consider it similar
+      return matches >= 2;
     }
 
     // Process the organization chart
@@ -642,7 +708,7 @@ class HTMLOrgChart {
 
     contentDiv.appendChild(figure);
 
-    // Full name
+    // name
     const namePara = document.createElement('p');
     namePara.className = 'c-name font-size-14 fw-600 mb-2';
     const nameSpan = document.createElement('span');
@@ -650,6 +716,15 @@ class HTMLOrgChart {
     nameSpan.textContent = node.name;
     namePara.appendChild(nameSpan);
     contentDiv.appendChild(namePara);
+
+    // surname
+    const surnamePara = document.createElement('p');
+    surnamePara.className = 'c-surname font-size-14 fw-600 mb-2';
+    const surnameSpan = document.createElement('span');
+    surnameSpan.title = node.last_name || '';
+    surnameSpan.textContent = node.last_name || '';
+    surnamePara.appendChild(surnameSpan);
+    contentDiv.appendChild(surnamePara);
 
     // Job title
     const jobPara = document.createElement('p');
