@@ -1,6 +1,6 @@
-/* HTMLOrgChart.css - Estilos para organigrama usando UL/LI */
+/* HTMLOrgChart.css - Styles for organization chart using UL/LI */
 
-/* Estilos generales */
+/* General styles */
 :root {
   --max-with: 180px;
 }
@@ -9,7 +9,7 @@ div#org-chart-container {
   background-color: #fff;
 }
 
-/* Contenedor principal del organigrama */
+/* Main container of the organization chart */
 .org-chart-container {
   position: relative;
   width: 100%;
@@ -23,14 +23,14 @@ div#org-chart-container {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
-  touch-action: none; /* Importante para dispositivos táctiles */
+  touch-action: none; /* Important for touch devices */
 }
 
 .org-chart-container.dragging {
   cursor: grabbing !important;
 }
 
-/* El organigrama en sí */
+/* The organization chart itself */
 .organigrama {
   display: inline;
   position: relative;
@@ -38,7 +38,7 @@ div#org-chart-container {
   background-color: #ffffff;
 }
 
-/* Estilos para las listas UL */
+/* Styles for UL lists */
 .organigrama .nodes {
   padding: 0;
   margin: 0;
@@ -49,7 +49,7 @@ div#org-chart-container {
   white-space: nowrap;
 }
 
-/* Items de la jerarquía */
+/* Hierarchy items */
 .organigrama .hierarchy {
   padding: 0;
   margin: 0 10px;
@@ -60,7 +60,7 @@ div#org-chart-container {
   align-items: center;
 }
 
-/* Para nodos colapsados */
+/* For collapsed nodes */
 .organigrama .isChildrenCollapsed > ul.nodes {
   display: none;
 }
@@ -69,7 +69,7 @@ div#org-chart-container {
   display: none !important;
 }
 
-/* Nodo individual */
+/* Individual node */
 .organigrama .node {
   position: relative;
   display: inline-block;
@@ -85,7 +85,7 @@ div#org-chart-container {
   z-index: 10;
 }
 
-/* Estilo para mostrar que el nodo es clicable */
+/* Style to show that the node is clickable */
 .organigrama .node.clickable {
   cursor: pointer;
 }
@@ -96,7 +96,7 @@ div#org-chart-container {
   transition: transform 0.2s, box-shadow 0.2s;
 } */
 
-/* Título del nodo */
+/* Node title */
 .organigrama .node .title {
   background-color: #f3f4f6;
   border-radius: 10px 10px 0 0;
@@ -112,19 +112,19 @@ div#org-chart-container {
   position: relative;
 }
 
-/* Ícono de líder */
+/* Leader icon */
 .organigrama .node .symbol {
   margin-right: 5px;
   color: #4ade80;
 }
 
-/* Contenido del nodo */
+/* Node content */
 .organigrama .node .content {
   padding: 0;
   font-size: 12px;
 }
 
-/* Figura/imagen del perfil */
+/* Profile figure/image */
 .organigrama .node figure {
   margin: 0 auto;
   width: 80px;
@@ -146,7 +146,7 @@ div#org-chart-container {
   overflow: visible;
 }
 
-/* Avatar placeholder cuando no hay imagen */
+/* Avatar placeholder when there's no image */
 .organigrama .avatar-placeholder {
   width: 80px;
   height: 80px;
@@ -160,7 +160,7 @@ div#org-chart-container {
   font-weight: bold;
 }
 
-/* Estilos para el nombre */
+/* Name styles */
 .organigrama .c-name {
   font-weight: 600;
   font-size: 14px;
@@ -171,13 +171,13 @@ div#org-chart-container {
   text-overflow: ellipsis;
 }
 
-/* Separador */
+/* Divider */
 .organigrama .node .content hr {
   margin: 5px 0;
   border-color: #e5e7eb;
 }
 
-/* Estilos para el cargo */
+/* Job title styles */
 .organigrama .c-job {
   font-size: 12px;
   color: #6b7280;
@@ -187,7 +187,7 @@ div#org-chart-container {
   text-overflow: ellipsis;
 }
 
-/* Líneas de conexión entre nodos - usando pseudo-elementos para mayor consistencia */
+/* Connection lines between nodes - using pseudo-elements for better consistency */
 .organigrama .hierarchy::before,
 .organigrama .hierarchy::after,
 .organigrama .hierarchy > ul.nodes::before {
@@ -198,7 +198,7 @@ div#org-chart-container {
   display: block !important;
 }
 
-/* Línea vertical desde el nodo hacia abajo */
+/* Vertical line from node downwards */
 .organigrama .hierarchy.isOpen::after {
   /*
   width: 2px !important;
@@ -209,7 +209,7 @@ div#org-chart-container {
   */
 }
 
-/* Líneas verticales hacia cada hijo */
+/* Vertical lines to each child */
 .organigrama .hierarchy > ul.nodes > li::before {
   content: '' !important;
   position: absolute !important;
@@ -223,7 +223,7 @@ div#org-chart-container {
   display: block !important;
 }
 
-/* Línea horizontal entre nodos hermanos - siempre visible */
+/* Horizontal line between sibling nodes - always visible */
 /*
 .organigrama .hierarchy > ul.nodes::before {
   height: 2px !important;
@@ -236,23 +236,23 @@ div#org-chart-container {
 }
 */
 
-/* Ocultar la línea horizontal solo cuando hay un único hijo */
+/* Hide horizontal line only when there's a single child */
 .organigrama .hierarchy > ul.nodes:has(> li:only-child)::before {
   display: none !important;
 }
 
-/* Para navegadores que no soportan :has */
+/* For browsers that don't support :has */
 .organigrama .hierarchy > ul.nodes:not(:has(> li + li))::before {
   display: none !important;
 }
 
-/* Nodo individual */
+/* Individual node */
 .organigrama .node {
-  z-index: 10; /* Asegurar que los nodos estén por encima de las líneas */
+  z-index: 10; /* Ensure nodes are above lines */
   position: relative;
 }
 
-/* Botones de expansión/colapso */
+/* Expand/collapse buttons */
 .organigrama .edge {
   position: absolute;
   cursor: pointer;
@@ -265,7 +265,7 @@ div#org-chart-container {
   align-items: center;
   justify-content: center;
   color: #4ade80;
-  z-index: 11; /* Mayor que el nodo para estar encima */
+  z-index: 11; /* Higher than the node to be on top */
 }
 
 .organigrama .edge:hover {
@@ -273,21 +273,21 @@ div#org-chart-container {
   border-color: #3acd74;
 }
 
-/* Posicionamiento específico de los botones */
+/* Specific positioning of buttons */
 .organigrama .edge.bottomEdge {
   bottom: -12px;
   left: 50%;
   transform: translateX(-50%);
 }
 
-/* Posicionamiento en el lado derecho centrado verticalmente */
+/* Positioning on the right side, vertically centered */
 .organigrama .edge.rightEdge {
   right: 30px;
   top: 30%;
   transform: translateY(-50%);
 }
 
-/* Número de hijos */
+/* Number of children */
 .organigrama .node-children-text {
   position: absolute;
   top: -8px;
@@ -303,15 +303,15 @@ div#org-chart-container {
   justify-content: center;
 }
 
-/* Iconos específicos */
+/* Specific icons */
 .oci-chevron-right:before { content: '›'; }
 .oci-chevron-left:before { content: '‹'; }
 
-/* Iconos específicos para los botones de expansión/contracción */
+/* Specific icons for expand/collapse buttons */
 .oci-plus:before { content: '+'; }
 .oci-minus:before { content: '−'; }
 
-/* Estilos para pantallas pequeñas */
+/* Styles for small screens */
 @media (max-width: 768px) {
   .organigrama .nodes {
     overflow-x: auto;
@@ -341,7 +341,7 @@ div#org-chart-container {
   }
 }
 
-/* Estilos para los controles */
+/* Styles for controls */
 .org-controls {
   position: absolute;
   bottom: 10px;
@@ -408,18 +408,18 @@ div#org-chart-container {
   background: #f3f4f6;
 }
 
-/* Ajustes para nodos extremos */
+/* Adjustments for edge nodes */
 .organigrama .hierarchy.first-child-node {
-  margin-left: 25px; /* Desplazar primer hijo hacia la derecha */
+  margin-left: 25px; /* Shift first child to the right */
 }
 
 .organigrama .hierarchy.last-child-node {
-  margin-right: 25px; /* Desplazar último hijo hacia la izquierda */
+  margin-right: 25px; /* Shift last child to the left */
 }
 
-/* Ajustar el ancho y posición de las líneas horizontales */
+/* Adjust width and position of horizontal lines */
 .organigrama .hierarchy > ul.nodes::before {
-  width: auto !important; /* El ancho se ajustará dinámicamente por JavaScript */
+  width: auto !important; /* Width will be dynamically adjusted by JavaScript */
   height: 2px;
   top: -20px;
   margin: 0;
