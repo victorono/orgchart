@@ -217,88 +217,185 @@ class HTMLOrgChart {
   processData() {
     const data = this.data.tree || this.data;
 
-    // Step 1: Group nodes by name to detect possible duplicates
-    const nodesByName = new Map();
-    for (const node of data) {
-      if (!nodesByName.has(node.name)) {
-        nodesByName.set(node.name, []);
-      }
-      nodesByName.get(node.name).push(node);
-    }
+    // Function to process the organization chart data
+    function processOrganizationChart(nodes) {
+      // console.log(`Processing ${nodes.length} nodes in total`);
 
-    // Step 2: Resolve duplicates and create main map
-    const nodeMap = new Map();
-    const duplicateLog = [];
+      // 1. Identify duplicates by name+title
+      const duplicatesByKey = {};
+      nodes.forEach(node => {
+        const key = `${node.name}|${node.title}`;
+        if (!duplicatesByKey[key]) {
+          duplicatesByKey[key] = [];
+        }
+        duplicatesByKey[key].push(node);
+      });
 
-    for (const [name, nodes] of nodesByName.entries()) {
-      if (nodes.length > 1) {
-        // There are duplicates, prioritize the one with children (pid appears as id of another node)
-        let primaryNode = nodes[0];
-        const childRefCount = new Map();
+      // Filter only real duplicates (more than 1 node)
+      const duplicates = Object.entries(duplicatesByKey)
+        .filter(([key, nodes]) => nodes.length > 1);
 
-        // Count how many nodes have each ID as parent
-        for (const node of data) {
-          if (node.pid) {
-            childRefCount.set(node.pid, (childRefCount.get(node.pid) || 0) + 1);
-          }
+      // console.log(`Found ${duplicates.length} duplicate name/title combinations`);
+
+      // 2. Create a mapping table to resolve duplicates
+      // Prefer nodes with pid (that have a parent)
+      const duplicateMapping = {};
+      duplicates.forEach(([key, dupes]) => {
+        // By default, choose the first one
+        let primaryNode = dupes[0];
+
+        // First look for nodes with pid
+        const nodeWithPid = dupes.find(node => node.pid);
+        if (nodeWithPid) {
+          primaryNode = nodeWithPid;
         }
 
-        // Find the node with the most children
-        for (const node of nodes) {
-          const childCount = childRefCount.get(node.id) || 0;
-          const primaryChildCount = childRefCount.get(primaryNode.id) || 0;
-
-          if (childCount > primaryChildCount) {
-            primaryNode = node;
+        // Record all duplicate IDs and which one is primary
+        dupes.forEach(node => {
+          if (node.id !== primaryNode.id) {
+            duplicateMapping[node.id] = primaryNode.id;
           }
-        }
-
-        // Log resolved duplicates for reference
-        duplicateLog.push({
-          name,
-          selectedId: primaryNode.id,
-          allIds: nodes.map(n => n.id)
         });
+      });
 
-        // Only add the primary node to the map
-        nodeMap.set(primaryNode.id, { ...primaryNode, children: [], level: 0 });
-      } else {
-        // No duplicates, add normally
-        const node = nodes[0];
-        nodeMap.set(node.id, { ...node, children: [], level: 0 });
+      // 3. Build a clean map of nodes
+      const nodeMap = {};
+      nodes.forEach(node => {
+        // Skip if it's a duplicate
+        if (duplicateMapping[node.id]) return;
+
+        // Add node to the map
+        nodeMap[node.id] = {
+          ...node,
+          children: [],
+          level: null // Will be set later
+        };
+      });
+
+      // 4. Build the hierarchy
+      const idsProcessed = new Set();
+      const rootNodes = [];
+
+      // First, identify the root nodes (nodes without parents or with non-existent parents)
+      nodes.forEach(node => {
+        // Skip if it's a duplicate
+        if (duplicateMapping[node.id]) return;
+
+        // Check if it's a root node
+        if (!node.pid || !nodeMap[duplicateMapping[node.pid] || node.pid]) {
+          const nodeToAdd = nodeMap[node.id];
+          if (nodeToAdd) {
+            rootNodes.push(nodeToAdd);
+            idsProcessed.add(node.id);
+          }
+        }
+      });
+
+      // Process parent-child relationships
+      nodes.forEach(node => {
+        // Skip if already processed or is a duplicate
+        if (idsProcessed.has(node.id) || duplicateMapping[node.id]) return;
+
+        if (node.pid) {
+          // Resolve the pid if it points to a duplicate
+          const resolvePid = duplicateMapping[node.pid] || node.pid;
+
+          // If the parent exists in our clean map
+          if (nodeMap[resolvePid]) {
+            // Add this node as a child of the parent
+            const nodeToAdd = nodeMap[node.id];
+            if (nodeToAdd) {
+              nodeMap[resolvePid].children.push(nodeToAdd);
+              idsProcessed.add(node.id);
+            }
+          } else {
+            // Parent doesn't exist or was eliminated for being a duplicate
+            // Add this node as a root
+            const nodeToAdd = nodeMap[node.id];
+            if (nodeToAdd) {
+              rootNodes.push(nodeToAdd);
+              idsProcessed.add(node.id);
+            }
+          }
+        }
+      });
+
+      // 5. Assign levels correctly using BFS (avoids deep recursion)
+      const queue = [...rootNodes.map(node => ({node, level: 0}))];
+      while (queue.length > 0) {
+        const {node, level} = queue.shift();
+
+        // Assign level
+        node.level = level;
+
+        // Add children to the queue
+        if (node.children && node.children.length > 0) {
+          node.children.forEach(child => {
+            queue.push({node: child, level: level + 1});
+          });
+        }
       }
+
+      // 6. Sort alphabetically without deep recursion
+      function sortNodesIterative(nodesToSort) {
+        const stack = [nodesToSort];
+
+        while (stack.length > 0) {
+          const currentNodes = stack.pop();
+
+          // Sort the current level
+          currentNodes.sort((a, b) => {
+            if (!a.name || !b.name) return 0;
+            return a.name.localeCompare(b.name);
+          });
+
+          // Add children to the stack
+          for (const node of currentNodes) {
+            if (node.children && node.children.length > 0) {
+              stack.push(node.children);
+            }
+          }
+        }
+      }
+
+      // Sort the nodes
+      sortNodesIterative(rootNodes);
+
+      return rootNodes;
     }
 
-    // Step 3: Build the hierarchy based on the clean map
-    const rootNodes = [];
-
-    // Traverse nodes to establish parent-child relationships
-    for (const [id, node] of nodeMap.entries()) {
-      if (node.pid && nodeMap.has(node.pid)) {
-        // Has a valid parent
-        const parentNode = nodeMap.get(node.pid);
-        node.level = parentNode.level + 1;
-        parentNode.children.push(node);
-      } else {
-        // It's a root node
-        node.level = 0;
-        rootNodes.push(node);
+    // Process the organization chart
+    try {
+      // Handle empty data
+      if (!data || data.length === 0) {
+        console.warn("No data to process");
+        this.hierarchicalData = [];
+        return [];
       }
+
+      const rootNodes = processOrganizationChart(data);
+
+      // Store the result for later use
+      this.hierarchicalData = rootNodes;
+
+      // Configure initial expansion if available
+      if (typeof this.configureInitialExpansion === 'function') {
+        try {
+          this.configureInitialExpansion();
+        } catch (e) {
+          console.error("Error configuring initial expansion:", e);
+        }
+      }
+
+      return rootNodes;
+    } catch (error) {
+      console.error("Error processing organization chart:", error);
+
+      // In case of error, return an empty array as fallback
+      this.hierarchicalData = [];
+      return [];
     }
-
-    // Sort nodes according to configuration
-    this.sortNodes(rootNodes);
-
-    // Log statistics for debugging
-    // console.debug(`Data processing: ${data.length} total nodes, ${nodeMap.size} unique nodes, ${rootNodes.length} root nodes, ${duplicateLog.length} resolved duplicates`);
-
-    // Store processed data
-    this.hierarchicalData = rootNodes;
-
-    // Configure initial expansion
-    this.configureInitialExpansion();
   }
-
   /**
    * Configure initial expansion state of nodes based on hierarchical level
    */
